@@ -120,6 +120,7 @@
                     <button onclick="masterTriggerGame('speed')" class="py-2 bg-cyan-400 hover:bg-cyan-500 text-slate-950 font-black rounded-xl text-xs geo-btn border-cyan-200">6. 스피드 시작</button>
                 </div>
 
+                <button onclick="startSpeedGo()" class="w-full py-3 bg-pink-500 text-white rounded-xl font-black geo-btn border-white">⚡ 6번 광클 GO 신호 시작</button>
                 <!-- 테이블 점수 강제 조절 -->
                 <div class="bg-slate-900 p-2.5 rounded-xl border-2 border-purple-400 space-y-1">
                     <label class="text-[11px] font-black text-yellow-300">🎯 테이블 점수 강제 조절</label>
@@ -233,15 +234,12 @@
                     </div>
                 </div>
 
-                <!-- 🎯 문제별 즉시 정답 및 순위 발표 제어 -->
-                <div class="bg-slate-900 p-2.5 rounded-xl border-2 border-yellow-400 space-y-1.5 mt-2">
-                    <span class="text-xs font-black text-yellow-300">🎯 문제별 정답 및 순위 즉시 발표</span>
-                    <button onclick="triggerQuestionResultModal()" class="w-full py-2 bg-yellow-400 text-slate-950 rounded-lg text-xs font-black geo-btn border-white">📢 현재 문제 정답 및 순위 공개하기</button>
-                </div>
-
-                <div class="bg-slate-900 p-2.5 rounded-xl border-2 border-yellow-400 space-y-1.5 mt-2">
-                    <span class="text-xs font-black text-yellow-300">📢 MC 라운드 정답 발표 및 결과 요약</span>
-                    <button onclick="triggerRoundResultModal()" class="w-full py-2 bg-yellow-400 text-slate-950 rounded-lg text-xs font-black geo-btn border-white">정답 발표 및 순위 요약 띄우기 🏆</button>
+                <!-- 관리자 발표 컨트롤 -->
+                <div class="bg-slate-900 p-3 rounded-xl border-2 border-yellow-400 space-y-2 mt-2">
+                    <span class="text-xs font-black text-yellow-300">📢 MC 발표 컨트롤</span>
+                    <button onclick="revealCurrentAnswer()" class="w-full py-3 bg-yellow-400 text-slate-950 rounded-xl font-black geo-btn border-white">🎯 정답 및 순위 발표</button>
+                    <button onclick="showMidScore()" class="w-full py-3 bg-cyan-400 text-slate-950 rounded-xl font-black geo-btn border-white">🏆 중간 스코어 공개 (13개 테이블)</button>
+                    <button onclick="closeMidScore()" class="w-full py-2 bg-slate-700 text-white rounded-xl font-black geo-btn border-white">✖ 중간 스코어 닫기</button>
                 </div>
 
                 <!-- ➡️ MC 순차적 진행 제어 버튼 (1번부터 6번 순서대로) -->
@@ -257,7 +255,7 @@
                     </div>
                 </div>
 
-<button onclick="revealCurrentAnswer()" class="w-full py-3 bg-yellow-400 text-slate-950 rounded-xl font-black geo-btn border-white">🎯 현재 문제 정답 공개</button>
+
                 <button onclick="masterTriggerGame('lobby')" class="w-full py-2 bg-slate-700 text-slate-200 font-black rounded-xl text-xs geo-btn border-slate-400">대기실(순위표)로 전체 복귀</button>
             </div>
 
@@ -331,7 +329,8 @@
             <!-- 8. 게임 6: 광클 스피드 -->
             <div id="screen-speed" class="screen hidden space-y-3">
                 <h3 class="text-lg font-black text-cyan-300">🔥 선착순 광클 스피드</h3>
-                <p id="display-speed-desc" class="text-xs font-black text-cyan-200">버튼이 뜨는 순간 가장 먼저 누르세요!</p>
+                <p id="display-speed-desc" class="text-xs font-black text-cyan-200">서로 다른 3개 테이블 선착순! 🥇30점 · 🥈20점 · 🥉10점</p>
+                <div id="speed-prizes" class="bg-slate-900 rounded-xl p-2 text-sm text-yellow-300 font-black">🥇 30점　🥈 20점　🥉 10점</div>
                 <div id="speed-box" class="py-10 bg-slate-900 rounded-2xl border-3 border-cyan-400 font-black text-slate-400 text-base shadow-[3px_3px_0px_#c084fc]">대기 중...</div>
                 <button id="speed-click-btn" onclick="clickSpeed()" class="w-full py-3.5 bg-emerald-400 text-slate-950 font-black rounded-xl text-xl geo-btn border-white hidden">광클릭!! ⚡</button>
             </div>
@@ -372,6 +371,7 @@
         let updownAttempts = 0;
         let participantJoined = false;
         let speedTimer = null;
+        let speedSubmitted = false;
 
         let globalState = {
             game: 'lobby',
@@ -426,14 +426,14 @@
                 if (currentUser.isHost) { globalState = nextState; refreshDrawingQuestions(); refreshChoseongQuestions(); refreshOxQuestions(); updateLobbyUI(); if (globalState.game === 'drawing') updateDrawerUI(); }
                 else if (participantJoined) applyStateToParticipant(nextState);
                 else { globalState = nextState; showLoginOnly(); }
-                updateRoundTimer();
+                updateRoundTimer(); renderMidScore();
             }
             if (topic === TOPIC_ACTION && currentUser.isHost) {
                 const action = JSON.parse(dataStr);
                 if (action.type === 'JOIN') addAdminLog(`👋 입장: [${action.player.table}] ${action.player.name}`, 'text-cyan-300');
                 if (action.type === 'CORRECT') addAdminLog(`✅ 정답! [${action.table}] ${action.name} (+${action.score}점)`, 'text-emerald-400');
                 if (action.type === 'WRONG') addAdminLog(`❌ 오답: [${action.table}] ${action.name} (입력: ${action.detail || ''})`, 'text-rose-400');
-                if (action.type === 'SPEED_CLICK') addAdminLog(`⚡ 스피드 1등! [${action.table}] ${action.name} (+${action.score}점)`, 'text-yellow-300');
+                if (action.type === 'SPEED_CLICK') addAdminLog(`⚡ 스피드 ${action.rank}등! [${action.table}] ${action.name} (+${action.score}점)`, 'text-yellow-300');
                 updateLobbyUI();
             }
             if (topic === TOPIC_DRAW && (dataStr === 'CLEAR' || !canIDraw())) renderCanvasFromData(dataStr);
@@ -546,6 +546,34 @@
             document.getElementById('admin-log-container').innerHTML = '<div class="text-slate-500 text-center pt-2">아직 수신된 액션이 없습니다.</div>';
         }
 
+        function showMidScore(){
+            if(!currentUser.isHost)return;
+            client.publish(TOPIC_ACTION,JSON.stringify({type:'SHOW_MID_SCORE'}));
+            addAdminLog('🏆 중간 스코어 전체 공개','text-cyan-300');
+        }
+        function closeMidScore(){
+            if(!currentUser.isHost)return;
+            client.publish(TOPIC_ACTION,JSON.stringify({type:'CLOSE_MID_SCORE'}));
+            addAdminLog('✖ 중간 스코어 닫기','text-cyan-300');
+        }
+        function renderMidScore(){
+            const overlay=document.getElementById('mid-score-overlay');
+            if(!overlay)return;
+            overlay.classList.toggle('hidden',!globalState.midScoreVisible);
+            if(!globalState.midScoreVisible)return;
+            const scores=globalState.scores||{};
+            const ordered=Array.from({length:13},(_,i)=>({table:'Table '+(i+1),score:Number(scores['Table '+(i+1)]||0)}))
+                .sort((a,b)=>b.score-a.score||Number(a.table.slice(6))-Number(b.table.slice(6)));
+            let rank=0,lastScore=null;
+            const rows=ordered.map((entry,i)=>{
+                if(entry.score!==lastScore){rank=i+1;lastScore=entry.score;}
+                const medal=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'🏅';
+                return `<div class="flex justify-between items-center px-3 py-2 rounded-lg ${rank<=3?'bg-slate-800':'bg-slate-900'} border border-slate-700"><span>${medal} ${rank}위 · ${entry.table.replace('Table ','')}번 테이블</span><strong class="text-cyan-300">${entry.score}점</strong></div>`;
+            });
+            document.getElementById('mid-score-rows').innerHTML=rows.join('');
+        }
+
+        function startSpeedGo(){if(globalState.game!=='speed'){alert('먼저 6번 스피드 게임을 시작하세요.');return;}client.publish(TOPIC_ACTION,JSON.stringify({type:'SPEED_START'}));addAdminLog('⚡ 광클 GO 신호 요청','text-pink-300');}
         function revealCurrentAnswer(){
             if(!currentUser.isHost)return;
             client.publish(TOPIC_ACTION,JSON.stringify({type:'REVEAL_ANSWER'}));
@@ -555,12 +583,12 @@
 
         function updateRoundTimer(){
             const el=document.getElementById('round-timer-banner');if(!el)return;
-            const active=['quiz','drawing','choseong','ox','balance'].includes(globalState.game);
+            const active=['quiz','drawing','choseong','ox','balance','speed'].includes(globalState.game);
             el.style.display=active?'block':'none';if(!active)return;
             const remain=Math.max(0,Math.ceil((Number(globalState.deadline||0)-Date.now())/1000));
-            const clock=document.getElementById('round-timer-clock');clock.textContent=String(Math.floor(remain/60)).padStart(2,'0')+':'+String(remain%60).padStart(2,'0');clock.style.color=remain<=10?'#fb7185':'#67e8f9';
-            document.getElementById('round-timer-name').textContent=({quiz:'객관식',drawing:'드로잉',choseong:'초성',ox:'OX',balance:'눈치 숫자맞히기'})[globalState.game]+' · 남은 시간';
-            document.getElementById('round-timer-note').textContent=remain===0?'⏰ 시간 종료! 정답 발표 대기 중':'문제 종료 시 자동 접수 마감';
+            const clock=document.getElementById('round-timer-clock');clock.textContent=globalState.game==='speed'?(globalState.speedPhase==='go'?'⚡ GO!':globalState.speedPhase==='closed'?'🏁 종료':'준비 중'):String(Math.floor(remain/60)).padStart(2,'0')+':'+String(remain%60).padStart(2,'0');clock.style.color=remain<=10?'#fb7185':'#67e8f9';
+            document.getElementById('round-timer-name').textContent=globalState.game==='speed'?'광클 스피드 · 선착순 3테이블':({quiz:'객관식',drawing:'드로잉',choseong:'초성',ox:'OX',balance:'눈치 숫자맞히기'})[globalState.game]+' · 남은 시간';
+            document.getElementById('round-timer-note').textContent=globalState.game==='speed'?'1등 30점 · 2등 20점 · 3등 10점':remain===0?'⏰ 시간 종료! 정답 발표 대기 중':'문제 종료 시 자동 접수 마감';
             const result=globalState.revealData;
             document.getElementById('round-reveal-text').textContent=globalState.revealed&&result?'🎯 정답: '+result.answer+'\n'+(result.rankings||[]).map((x,i)=>(i+1)+'등 '+x.table+' +'+x.points+'점').join(' / '):'';
         }
@@ -875,6 +903,7 @@
             const choseongChanged = gameChanged || previous.choseongIndex !== newState.choseongIndex || JSON.stringify(previous.choseongList) !== JSON.stringify(newState.choseongList);
             const balanceChanged = gameChanged || previous.roundId !== newState.roundId || previous.secretNumber !== newState.secretNumber;
             const speedChanged = gameChanged || previous.roundId !== newState.roundId;
+            const speedPhaseChanged = previous.speedPhase !== newState.speedPhase || (previous.speedWinners||[]).length !== (newState.speedWinners||[]).length;
             const drawingChanged = gameChanged || previous.roundId !== newState.roundId || JSON.stringify(previous.drawer) !== JSON.stringify(newState.drawer) || previous.drawingWord !== newState.drawingWord;
             globalState = newState;
             if (gameChanged) {
@@ -889,8 +918,9 @@
             if (globalState.game === 'drawing' && drawingChanged) initDrawingCanvas();
             if (globalState.game === 'balance' && balanceChanged) initBalanceUI();
             if (globalState.game === 'speed' && speedChanged) initSpeedUI();
+            if (globalState.game === 'speed' && (speedChanged || speedPhaseChanged)) updateSpeedUI();
             if (globalState.game === 'choseong' && choseongChanged) initChoseongUI();
-            updateLobbyUI();updateRoundTimer();
+            updateLobbyUI();updateRoundTimer();renderMidScore();
             if (globalState.game === 'drawing' && drawingChanged) updateDrawerUI();
         }
 
@@ -1068,23 +1098,25 @@
             client.publish(TOPIC_ACTION, JSON.stringify({ type: 'UPDOWN_GUESS', table: currentUser.table, name: currentUser.name, value: val }));
         }
 
-        function initSpeedUI() {
-            const box = document.getElementById('speed-box');
-            const btn = document.getElementById('speed-click-btn');
-            box.innerText = "준비..."; 
-            box.className = "py-10 bg-slate-900 rounded-2xl border-3 border-cyan-400 font-black text-slate-400 text-base shadow-[3px_3px_0px_#c084fc]";
-            btn.classList.add('hidden');
-            speedTimer = setTimeout(() => {
-                if (!participantJoined || globalState.game !== 'speed') return;
-                box.innerText = "지금 누르세요!";
-                box.classList.remove('bg-slate-900', 'text-slate-400'); 
-                box.classList.add('bg-pink-500', 'text-white');
-                btn.classList.remove('hidden');
-            }, Math.random() * 2000 + 1000);
+        function initSpeedUI() { speedSubmitted=false;updateSpeedUI(); }
+        function updateSpeedUI() {
+            const box=document.getElementById('speed-box'),btn=document.getElementById('speed-click-btn');
+            if(!box||!btn)return;
+            const phase=globalState.speedPhase||'waiting';
+            const winners=globalState.speedWinners||[];
+            const myTable=currentUser.table;
+            const already=speedSubmitted||winners.some(x=>x.table===myTable);
+            if(phase==='waiting'){box.textContent='관리자 시작 대기 중…';}
+            else if(phase==='ready'){box.textContent='준비… GO 신호를 기다리세요!';}
+            else if(phase==='go'){box.textContent=already?'접수 완료! 결과 발표를 기다려주세요.':'⚡ 지금 누르세요!';}
+            else {box.textContent='🏁 선착순 3개 테이블 접수 완료! 관리자 발표 대기';}
+            btn.classList.toggle('hidden',phase!=='go'||already||!participantJoined);
+            btn.disabled=phase!=='go'||already;
         }
         function clickSpeed() {
-            client.publish(TOPIC_ACTION, JSON.stringify({ type: 'SPEED_CLICK', table: currentUser.table, name: currentUser.name }));
-            document.getElementById('speed-click-btn').classList.add('hidden');
+            if(globalState.game!=='speed'||globalState.speedPhase!=='go'||(globalState.speedWinners||[]).some(x=>x.table===currentUser.table))return;
+            client.publish(TOPIC_ACTION,JSON.stringify({type:'SPEED_CLICK',table:currentUser.table,name:currentUser.name}));
+            speedSubmitted=true;document.getElementById('speed-click-btn').classList.add('hidden');
         }
     </script>
 
@@ -1098,6 +1130,15 @@
             <button type="button" onclick="closeRoundResultModal()" class="w-full py-2.5 bg-pink-500 hover:bg-pink-600 text-white font-black rounded-xl text-sm geo-btn border-white">확인 완료 (대기실 복귀)</button>
         </div>
     </div>
+
+<div id="mid-score-overlay" class="fixed inset-0 z-[1100] hidden bg-slate-950/95 overflow-y-auto p-4">
+    <div class="max-w-md mx-auto my-5 rounded-2xl border-4 border-cyan-400 bg-slate-950 p-4 shadow-xl">
+        <h2 class="text-center text-2xl font-black text-yellow-300 mb-2">🏆 지구오락실 중간 스코어</h2>
+        <p class="text-center text-xs text-slate-300 mb-4">13개 테이블 누적 점수 · 동점 공동 순위</p>
+        <div id="mid-score-rows" class="space-y-1.5 text-sm font-black text-white"></div>
+        <p class="text-center text-xs text-slate-400 mt-4">👑 관리자가 화면을 닫으면 게임으로 돌아갑니다.</p>
+    </div>
+</div>
 
 <div id="round-timer-banner" style="display:none;position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:1000;background:#0f172a;color:#67e8f9;border:2px solid #22d3ee;border-radius:14px;padding:8px 16px;text-align:center;box-shadow:0 4px 16px #0009;min-width:200px;font-weight:bold"><div id="round-timer-name" style="font-size:12px">남은 시간</div><div id="round-timer-clock" style="font-size:30px;font-variant-numeric:tabular-nums">00:00</div><div id="round-timer-note" style="font-size:11px;color:#cbd5e1"></div><div id="round-reveal-text" style="font-size:13px;color:#fde68a;white-space:pre-wrap"></div></div>
 </body>
