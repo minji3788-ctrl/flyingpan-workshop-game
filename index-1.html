@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>우주오락실 (기획실편) 🏆 테이블 대항전</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { 
+            font-family: 'Jua', sans-serif; 
+            background: linear-gradient(135deg, #050515 0%, #0d1b2a 50%, #1b1035 100%); 
+            color: #f8fafc; 
+            font-size: 1.1rem; 
+            touch-action: manipulation;
+        }
+        .geo-card { 
+            border: 4px solid #38bdf8; 
+            box-shadow: 6px 6px 0px #c084fc; 
+            border-radius: 1.5rem; 
+            background: #0f172a; 
+            color: #fff; 
+        }
+        .geo-btn { 
+            border: 3px solid #38bdf8; 
+            box-shadow: 4px 4px 0px #c084fc; 
+            transition: all 0.1s ease; 
+        }
+        .geo-btn:active { 
+            transform: translate(2px, 2px); 
+            box-shadow: 2px 2px 0px #c084fc; 
+        }
+        .geo-input { 
+            border: 3px solid #38bdf8; 
+            background: #1e293b; 
+            color: #fff; 
+            border-radius: 1rem; 
+        }
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .log-item { animation: fadeInDown 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-md geo-card overflow-hidden p-6 text-center relative flex flex-col max-h-[92vh]">
+
+        <div class="mb-4 flex-shrink-0 bg-gradient-to-r from-purple-700 via-indigo-600 to-cyan-600 text-yellow-300 py-3 px-4 rounded-2xl border-3 border-cyan-400 shadow-[4px_4px_0px_#38bdf8] transform -rotate-1">
+            <h1 class="text-3xl font-black tracking-wider text-cyan-200 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">🚀 우주오락실 🚀</h1>
+            <p id="banner-sub" class="text-base text-yellow-300 font-black mt-1 tracking-wide drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">✨ 기획실편 ✨</p><p id="connection-status" class="text-[10px] text-emerald-300 mt-1">서버 연결 중…</p>
+        </div>
+
+        <!-- 🔴 관리자용 실시간 모니터링 현황판 (MC 전용) -->
+        <div id="admin-live-dashboard" class="hidden flex-shrink-0 mb-3 bg-slate-900 border-2 border-pink-400 rounded-2xl p-3 text-left flex flex-col h-36 shadow-[4px_4px_0px_#c084fc]">
+            <div class="flex justify-between items-center mb-1 border-b border-slate-700 pb-1">
+                <span class="text-xs font-black text-pink-400">👑 MC 모니터링 현황판 (정/오답 실시간)</span>
+                <button onclick="clearAdminLog()" class="text-[10px] bg-slate-700 px-2 py-0.5 rounded text-white font-black">로그 지우기</button>
+            </div>
+            <div id="admin-log-container" class="flex-1 overflow-y-auto space-y-1 text-xs font-black">
+                <div class="text-slate-500 text-center pt-2">아직 수신된 액션이 없습니다.</div>
+            </div>
+        </div>
+
+        <!-- 메인 콘텐츠 영역 (스크롤 가능) -->
+        <div class="flex-1 overflow-y-auto pb-4 space-y-4">
+            
+            <!-- 1. 참가자 로그인 화면 -->
+            <div id="screen-login" class="screen space-y-3">
+                <h2 class="text-xl text-yellow-300 font-black">👋 참가자 등록</h2>
+                <p class="text-xs text-slate-300">게임 참여 전 반드시 이름과 테이블 번호를 등록해주세요.</p>
+                <p class="text-sm font-black text-cyan-300">소속 테이블(1~13번)과 닉네임을 입력하세요!</p>
+                <select id="select-table" class="w-full px-4 py-3 geo-input font-black text-center text-white text-base">
+                    <option value="" disabled selected class="text-slate-400">🍽️ 테이블 번호 선택 (1 ~ 13번)</option>
+                    <option value="Table 1">1번 테이블</option><option value="Table 2">2번 테이블</option>
+                    <option value="Table 3">3번 테이블</option><option value="Table 4">4번 테이블</option>
+                    <option value="Table 5">5번 테이블</option><option value="Table 6">6번 테이블</option>
+                    <option value="Table 7">7번 테이블</option><option value="Table 8">8번 테이블</option>
+                    <option value="Table 9">9번 테이블</option><option value="Table 10">10번 테이블</option>
+                    <option value="Table 11">11번 테이블</option><option value="Table 12">12번 테이블</option>
+                    <option value="Table 13">13번 테이블</option>
+                </select>
+                <input type="text" id="input-nickname" placeholder="본인 닉네임 입력" class="w-full px-4 py-3 geo-input text-center text-base font-black placeholder-slate-400">
+                <button onclick="joinGame()" class="w-full py-3.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-black text-lg rounded-2xl geo-btn border-cyan-400">입장하기 🛸</button>
+                <div class="pt-2 text-center">
+                    <button type="button" onclick="triggerAdminPrompt()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-black text-xs rounded-xl geo-btn border-slate-500 cursor-pointer">
+                        ⚙️ 관리자 모드 진입
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. 대기실 화면 (참가자용) -->
+            <div id="screen-lobby" class="screen hidden space-y-3">
+                <p class="text-cyan-200 text-sm">참가자: <strong id="lobby-identity"></strong> <button onclick="changeParticipant()" class="underline text-yellow-300 text-xs">변경</button></p>
+                <h2 class="text-xl font-black text-cyan-300">🎮 참여 대기실</h2>
+                <div class="bg-slate-900 p-3 rounded-2xl border-2 border-cyan-400 text-left">
+                    <p class="text-xs font-black text-cyan-200 mb-1">✨ 접속한 동료들: <span id="player-count" class="text-yellow-300">0</span>명</p>
+                    <ul id="player-list" class="space-y-1 text-xs font-black text-slate-100 max-h-20 overflow-y-auto"></ul>
+                </div>
+                <div class="p-3 bg-indigo-950 rounded-2xl border-2 border-purple-400 text-left">
+                    <p class="text-xs font-black text-yellow-300 mb-1">🏅 현재 테이블 순위 TOP 5</p>
+                    <div id="lobby-rankings" class="text-xs font-black space-y-1 text-slate-100"></div>
+                </div>
+                <p id="wait-msg" class="text-sm font-black text-yellow-300 animate-bounce">마스터가 게임을 시작하기를 기다리는 중...</p>
+            </div>
+
+            <!-- 👑 2-1. 관리자 전용 마스터 컨트롤 및 게임별 맞춤형 편집 패널 -->
+            <div id="host-panel" class="screen hidden space-y-3 text-left">
+                <p class="text-xs font-black text-pink-400 border-b border-pink-500/30 pb-1">👑 우주선 마스터 컨트롤 (실시간 전체 동기화)</p>
+
+                <!-- 게임 시작 버튼들 -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="masterTriggerGame('quiz')" class="py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-xl text-xs geo-btn border-emerald-300">1. 퀴즈 시작</button>
+                    <button onclick="masterTriggerGame('drawing')" class="py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black rounded-xl text-xs geo-btn border-amber-200">2. 드로잉 시작</button>
+                    <button onclick="masterTriggerGame('choseong')" class="py-2 bg-blue-400 hover:bg-blue-500 text-slate-950 font-black rounded-xl text-xs geo-btn border-blue-200">3. 초성 시작</button>
+                    <button onclick="masterTriggerGame('ox')" class="py-2 bg-purple-400 hover:bg-purple-500 text-slate-950 font-black rounded-xl text-xs geo-btn border-purple-200">4. OX 시작</button>
+                    <button onclick="masterTriggerGame('balance')" class="py-2 bg-rose-400 hover:bg-rose-500 text-slate-950 font-black rounded-xl text-xs geo-btn border-rose-200">5. 눈치 숫자맞히기 시작</button>
+                    <button onclick="masterTriggerGame('speed')" class="py-2 bg-cyan-400 hover:bg-cyan-500 text-slate-950 font-black rounded-xl text-xs geo-btn border-cyan-200">6. 스피드 시작</button>
+                </div>
+
+                <!-- 테이블 점수 강제 조절 -->
+                <div class="bg-slate-900 p-2.5 rounded-xl border-2 border-purple-400 space-y-1">
+                    <label class="text-[11px] font-black text-yellow-300">🎯 테이블 점수 강제 조절</label>
+                    <div class="flex gap-1">
+                        <select id="admin-target-table" class="flex-1 px-1 py-1 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                            <option value="Table 1">1번</option><option value="Table 2">2번</option><option value="Table 3">3번</option><option value="Table 4">4번</option><option value="Table 5">5번</option><option value="Table 6">6번</option><option value="Table 7">7번</option><option value="Table 8">8번</option><option value="Table 9">9번</option><option value="Table 10">10번</option><option value="Table 11">11번</option><option value="Table 12">12번</option><option value="Table 13">13번</option>
+                        </select>
+                        <input type="number" id="admin-score-input" placeholder="+/-" class="w-14 px-1 py-1 border border-cyan-400 rounded-lg text-xs text-center font-black bg-slate-950 text-white">
+                        <button onclick="adminAdjustScore()" class="px-2.5 py-1 bg-cyan-400 text-slate-950 rounded-lg text-xs font-black geo-btn border-white">반영</button>
+                    </div>
+                </div>
+
+                <!-- 🗂️ [탭 영역] 게임별 맞춤 설정 패널 -->
+                <div class="flex bg-slate-950 p-1 rounded-xl border border-cyan-400 text-[11px] font-black justify-between">
+                    <button onclick="switchAdminTab('quiz')" id="tab-btn-quiz" class="flex-1 py-1 rounded-lg bg-cyan-500 text-slate-950">1.객관식</button>
+                    <button onclick="switchAdminTab('drawing')" id="tab-btn-drawing" class="flex-1 py-1 rounded-lg text-slate-300">2.드로잉</button>
+                    <button onclick="switchAdminTab('choseong')" id="tab-btn-choseong" class="flex-1 py-1 rounded-lg text-slate-300">3.초성</button>
+                    <button onclick="switchAdminTab('ox')" id="tab-btn-ox" class="flex-1 py-1 rounded-lg text-slate-300">4.OX</button>
+                    <button onclick="switchAdminTab('balance')" id="tab-btn-balance" class="flex-1 py-1 rounded-lg text-slate-300">5.업다운</button>
+                </div>
+
+                <!-- [탭 1] 객관식 퀴즈 관리 폼 -->
+                <div id="admin-panel-quiz" class="admin-tab-content bg-slate-900 p-2.5 rounded-xl border-2 border-emerald-400 space-y-2">
+                    <span class="text-xs font-black text-emerald-300">📝 [객관식 퀴즈] 편집 및 추가</span>
+                    <div class="flex gap-1 items-center">
+                        <select id="admin-quiz-select" onchange="loadQuizToAdminEdit()" class="flex-1 px-2 py-1 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                            <option value="" disabled selected>수정할 퀴즈 선택</option>
+                        </select>
+                        <button onclick="deleteQuizItem()" class="px-2 py-1 bg-rose-500 text-white rounded-lg text-xs font-black geo-btn">삭제</button>
+                    </div>
+                    <input type="text" id="admin-q-text" placeholder="질문 내용 입력" class="w-full px-2 py-1.5 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                    <div class="grid grid-cols-2 gap-1">
+                        <input type="text" id="admin-q-c1" placeholder="보기 1" class="px-2 py-1 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                        <input type="text" id="admin-q-c2" placeholder="보기 2" class="px-2 py-1 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                        <input type="text" id="admin-q-c3" placeholder="보기 3" class="px-2 py-1 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                        <input type="text" id="admin-q-c4" placeholder="보기 4" class="px-2 py-1 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                    </div>
+                    <div class="flex gap-1 items-center">
+                        <span class="text-[10px] font-black text-cyan-200">정답(1~4):</span>
+                        <input type="number" id="admin-q-ans" min="1" max="4" value="1" class="w-10 px-1 py-1 border border-cyan-400 rounded-lg text-xs text-center font-black bg-slate-950 text-white">
+                        <button onclick="adminSaveQuizEdit()" class="flex-1 py-1 bg-emerald-500 text-slate-950 rounded-lg text-xs font-black geo-btn">수정반영</button>
+                        <button onclick="adminAddQuiz()" class="py-1 px-2 bg-indigo-500 text-white rounded-lg text-xs font-black geo-btn">+추가</button>
+                    </div>
+                </div>
+
+                <!-- [탭 2] 드로잉(캐치마인드) 관리 폼 -->
+                <div id="admin-panel-drawing" class="admin-tab-content hidden bg-slate-900 p-2.5 rounded-xl border-2 border-amber-400 space-y-2">
+                    <span class="text-xs font-black text-amber-300">🎨 [캐치마인드 드로잉] 설정</span>
+                    <div>
+                        <label class="text-[10px] font-black text-amber-200">출제자 지정:</label>
+                        <div class="flex gap-1 mt-0.5">
+                            <select id="admin-drawer-select" class="flex-1 px-2 py-1 border border-amber-400 rounded-lg text-xs bg-slate-950 text-white font-black"><option value="">출제자 미지정</option></select>
+                            <button onclick="applyDrawerEdit()" class="px-2 py-1 bg-amber-500 text-slate-950 rounded-lg text-xs font-black geo-btn">지정</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black text-amber-200">제시어 변경:</label>
+                        <div class="flex gap-1 mt-0.5">
+                            <input type="text" id="edit-draw-word" placeholder="새 제시어 입력" class="flex-1 px-2 py-1 border border-amber-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                            <button onclick="applyDrawWordEdit()" class="px-2 py-1 bg-amber-400 text-slate-950 rounded-lg text-xs font-black geo-btn">제시어적용</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- [탭 3] 초성 퀴즈 관리 폼 -->
+                <div id="admin-panel-choseong" class="admin-tab-content hidden bg-slate-900 p-2.5 rounded-xl border-2 border-blue-400 space-y-2">
+                    <span class="text-xs font-black text-blue-300">⚡ [초성 퀴즈] 문제 설정</span>
+                    <input type="text" id="admin-cho-target" placeholder="초성 입력 (예: ㄱ ㅈ)" class="w-full px-2 py-1.5 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                    <input type="text" id="admin-cho-ans" placeholder="정답 단어 입력" class="w-full px-2 py-1.5 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                    <button onclick="adminSaveChoseong()" class="w-full py-1.5 bg-blue-500 text-white rounded-lg text-xs font-black geo-btn">초성 문제 즉시 반영 🚀</button>
+                </div>
+
+                <!-- [탭 4] OX 퀴즈 관리 폼 -->
+                <div id="admin-panel-ox" class="admin-tab-content hidden bg-slate-900 p-2.5 rounded-xl border-2 border-purple-400 space-y-2">
+                    <span class="text-xs font-black text-purple-300">⭕❌ [OX 퀴즈] 문제 추가</span>
+                    <input type="text" id="admin-ox-q" placeholder="OX 질문 내용" class="w-full px-2 py-1.5 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                    <div class="flex gap-1 items-center">
+                        <span class="text-[10px] font-black text-cyan-200">정답:</span>
+                        <select id="admin-ox-ans" class="flex-1 px-2 py-1 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                            <option value="O">O (참)</option>
+                            <option value="X">X (거짓)</option>
+                        </select>
+                        <button onclick="adminAddOx()" class="py-1 px-3 bg-purple-600 text-white rounded-lg text-xs font-black geo-btn">+추가</button>
+                    </div>
+                </div>
+
+                <!-- [탭 5] 업다운 정답 설정 폼 -->
+                <div id="admin-panel-balance" class="admin-tab-content hidden bg-slate-900 p-2.5 rounded-xl border-2 border-rose-400 space-y-2">
+                    <span class="text-xs font-black text-rose-300">⚖️ [업다운] 비밀 정답 설정 (1~100)</span>
+                    <div class="flex gap-1">
+                        <input type="number" id="admin-secret-num" min="1" max="100" placeholder="비밀 숫자 입력" class="flex-1 px-2 py-1.5 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white text-center font-black">
+                        <button onclick="adminSaveSecretNum()" class="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-black geo-btn">정답변경 🚀</button>
+                    </div>
+                </div>
+
+                <!-- 🎯 문제별 즉시 정답 및 순위 발표 제어 -->
+                <div class="bg-slate-900 p-2.5 rounded-xl border-2 border-yellow-400 space-y-1.5 mt-2">
+                    <span class="text-xs font-black text-yellow-300">🎯 문제별 정답 및 순위 즉시 발표</span>
+                    <button onclick="triggerQuestionResultModal()" class="w-full py-2 bg-yellow-400 text-slate-950 rounded-lg text-xs font-black geo-btn border-white">📢 현재 문제 정답 및 순위 공개하기</button>
+                </div>
+
+                <div class="bg-slate-900 p-2.5 rounded-xl border-2 border-yellow-400 space-y-1.5 mt-2">
+                    <span class="text-xs font-black text-yellow-300">📢 MC 라운드 정답 발표 및 결과 요약</span>
+                    <button onclick="triggerRoundResultModal()" class="w-full py-2 bg-yellow-400 text-slate-950 rounded-lg text-xs font-black geo-btn border-white">정답 발표 및 순위 요약 띄우기 🏆</button>
+                </div>
+
+                <!-- ➡️ MC 순차적 진행 제어 버튼 (1번부터 6번 순서대로) -->
+                <div class="bg-slate-900 p-3 rounded-xl border-2 border-cyan-400 space-y-2 mt-2">
+                    <span class="text-xs font-black text-cyan-300">🎮 MC 단계별 순서 제어 (1번 ➔ 6번)</span>
+                    <div class="grid grid-cols-2 gap-1.5">
+                        <button onclick="masterTriggerGame('quiz'); addAdminLog('▶️ 1단계: 객관식 퀴즈 시작', 'text-cyan-300');" class="py-2 bg-emerald-500 text-slate-950 rounded-lg text-xs font-black geo-btn border-white">1번. 객관식 넘기기 ➡️</button>
+                        <button onclick="masterTriggerGame('drawing'); addAdminLog('▶️ 2단계: 드로잉 시작', 'text-cyan-300');" class="py-2 bg-amber-400 text-slate-950 rounded-lg text-xs font-black geo-btn border-white">2번. 드로잉 넘기기 ➡️</button>
+                        <button onclick="masterTriggerGame('choseong'); addAdminLog('▶️ 3단계: 초성 퀴즈 시작', 'text-cyan-300');" class="py-2 bg-blue-400 text-slate-950 rounded-lg text-xs font-black geo-btn border-white">3번. 초성 퀴즈 넘기기 ➡️</button>
+                        <button onclick="masterTriggerGame('ox'); addAdminLog('▶️ 4단계: OX 퀴즈 시작', 'text-cyan-300');" class="py-2 bg-purple-400 text-white rounded-lg text-xs font-black geo-btn border-white">4번. OX 퀴즈 넘기기 ➡️</button>
+                        <button onclick="masterTriggerGame('balance'); addAdminLog('▶️ 5단계: 업다운 시작', 'text-cyan-300');" class="py-2 bg-rose-400 text-slate-950 rounded-lg text-xs font-black geo-btn border-white">5번. 눈치 숫자맞히기 시작 ➡️</button>
+                        <button onclick="masterTriggerGame('speed'); addAdminLog('▶️ 6단계: 광클 스피드 시작', 'text-cyan-300');" class="py-2 bg-cyan-400 text-slate-950 rounded-lg text-xs font-black geo-btn border-white">6번. 광클 스피드 넘기기 ➡️</button>
+                    </div>
+                </div>
+
+                <button onclick="masterTriggerGame('lobby')" class="w-full py-2 bg-slate-700 text-slate-200 font-black rounded-xl text-xs geo-btn border-slate-400">대기실(순위표)로 전체 복귀</button>
+            </div>
+
+            <!-- 3. 게임 1: 실시간 퀴즈 -->
+            <div id="screen-quiz" class="screen hidden space-y-3">
+                <div class="flex justify-between items-center text-xs font-black text-slate-200">
+                    <span id="quiz-progress" class="bg-cyan-500 text-slate-950 px-2.5 py-1 border border-white rounded-lg font-black">문제 1</span>
+                    <span class="text-yellow-300 text-sm">내 점수: <span id="table-score-1">0</span>점</span>
+                </div>
+                <h3 id="quiz-question" class="text-base font-black text-cyan-200 min-h-[70px] flex items-center justify-center bg-slate-900 p-3 rounded-2xl border-3 border-cyan-400 shadow-[3px_3px_0px_#c084fc]"></h3>
+                <div id="quiz-choices" class="space-y-2"></div>
+                <div id="quiz-feedback" class="text-sm font-black min-h-[20px]"></div>
+            </div>
+
+            <!-- 4. 게임 2: 드로잉 퀴즈 -->
+            <div id="screen-drawing" class="screen hidden space-y-2.5">
+                <div class="flex justify-between items-center text-xs font-black text-slate-200">
+                    <span class="bg-amber-400 text-slate-950 px-2 py-1 border rounded-lg">🎨 캐치마인드</span>
+                    <span class="text-yellow-300 text-sm">점수: <span id="table-score-2">0</span>점</span>
+                </div>
+                <div class="text-xs font-black bg-slate-900 py-1.5 px-3 rounded-xl border-2 border-amber-400 text-slate-200 flex justify-between items-center">
+                    <span>👤 출제자: <span id="display-drawer-name" class="text-pink-400">대기중</span></span>
+                </div>
+                <div class="text-sm font-black bg-slate-900 py-2 px-3 rounded-xl border-2 border-cyan-400 text-yellow-300 text-center">
+                    제시어: <span id="display-drawing-word">[ 🔒 비밀 제시어 ]</span>
+                </div>
+                <div class="relative">
+                    <canvas id="canvas" width="280" height="200" class="border-3 border-pink-400 rounded-2xl bg-white mx-auto cursor-crosshair touch-none shadow-[3px_3px_0px_#c084fc]"></canvas>
+                </div>
+                <div id="drawer-tools" class="hidden text-center">
+                    <button onclick="clearCanvasEvent()" class="text-xs px-4 py-1.5 bg-slate-800 rounded-xl font-black text-white geo-btn">그림 지우기 🧹</button>
+                </div>
+                <div class="flex gap-2">
+                    <input type="text" id="draw-guess-input" placeholder="정답 입력!" class="flex-1 px-3 py-2.5 geo-input text-xs font-black">
+                    <button onclick="submitDrawGuess()" class="px-4 py-2.5 bg-pink-500 text-white rounded-xl text-xs font-black geo-btn">전송</button>
+                </div>
+            </div>
+
+            <!-- 5. 게임 3: 초성 퀴즈 -->
+            <div id="screen-choseong" class="screen hidden space-y-3">
+                <h3 class="text-lg font-black text-purple-300">⚡ 초성 퀴즈</h3>
+                <p class="text-xs font-black text-cyan-200">제시된 초성을 보고 단어를 입력하세요!</p>
+                <div id="choseong-target" class="text-3xl font-black text-cyan-300 py-5 bg-slate-900 rounded-2xl border-3 border-cyan-400 tracking-widest">ㄱ ㅈ</div>
+                <input type="text" id="choseong-input" placeholder="정답 입력" class="w-full px-4 py-3 geo-input text-center text-sm font-black">
+                <button onclick="submitChoseong()" class="w-full py-3 bg-purple-600 text-white font-black rounded-xl text-sm geo-btn shadow-[3px_3px_0px_#c084fc]">제출 (+10점) 🎯</button>
+            </div>
+
+            <!-- 6. 게임 4: OX 퀴즈 -->
+            <div id="screen-ox" class="screen hidden space-y-3">
+                <div class="flex justify-between items-center text-xs font-black text-slate-200">
+                    <span id="ox-progress" class="bg-purple-500 text-white px-2.5 py-1 border rounded-lg">OX 문제</span>
+                    <span class="text-yellow-300 text-sm">점수: <span id="table-score-ox">0</span>점</span>
+                </div>
+                <h3 id="ox-question" class="text-base font-black text-cyan-200 min-h-[70px] flex items-center justify-center bg-slate-900 p-3 rounded-2xl border-3 border-cyan-400"></h3>
+                <div class="grid grid-cols-2 gap-3 pt-1">
+                    <button onclick="answerOx('O')" class="py-5 bg-rose-600 hover:bg-rose-500 border-3 border-cyan-300 rounded-2xl text-3xl font-black text-white geo-btn">⭕ O</button>
+                    <button onclick="answerOx('X')" class="py-5 bg-sky-600 hover:bg-sky-500 border-3 border-cyan-300 rounded-2xl text-3xl font-black text-white geo-btn">❌ X</button>
+                </div>
+                <div id="ox-feedback" class="text-sm font-black min-h-[20px]"></div>
+            </div>
+
+            <!-- 7. 게임 5: 업다운 -->
+            <div id="screen-balance" class="screen hidden space-y-3">
+                <h3 class="text-lg font-black text-rose-400">🎯 눈치 숫자맞히기</h3>
+                <p class="text-xs font-black text-cyan-200">1~100 사이 숫자를 맞히세요!</p>
+                <div id="updown-status" class="py-3 bg-slate-900 rounded-2xl border-3 border-rose-400 font-black text-rose-300 text-xs shadow-[3px_3px_0px_#c084fc]">도전하세요! (1 ~ 100)</div>
+                <input type="number" id="updown-input" min="1" max="100" placeholder="숫자 (1~100)" class="w-full px-4 py-3 geo-input text-center text-base font-black">
+                <button onclick="submitUpDown()" class="w-full py-3 bg-rose-600 text-white font-black rounded-xl text-sm geo-btn">제출 🔥</button>
+            </div>
+
+            <!-- 8. 게임 6: 광클 스피드 -->
+            <div id="screen-speed" class="screen hidden space-y-3">
+                <h3 class="text-lg font-black text-cyan-300">🔥 선착순 광클 스피드</h3>
+                <p id="display-speed-desc" class="text-xs font-black text-cyan-200">버튼이 뜨는 순간 가장 먼저 누르세요!</p>
+                <div id="speed-box" class="py-10 bg-slate-900 rounded-2xl border-3 border-cyan-400 font-black text-slate-400 text-base shadow-[3px_3px_0px_#c084fc]">대기 중...</div>
+                <button id="speed-click-btn" onclick="clickSpeed()" class="w-full py-3.5 bg-emerald-400 text-slate-950 font-black rounded-xl text-xl geo-btn border-white hidden">광클릭!! ⚡</button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Socket.IO transport. The server validates actions and owns authoritative scores/state.
+        const socket = io({ reconnection: true, reconnectionAttempts: Infinity, timeout: 10000 });
+        const client = {
+            on(event, callback) {
+                if (event === 'connect') socket.on('connect', callback);
+                if (event === 'message') socket.on('mqtt:message', (packet) => callback(packet.topic, { toString: () => packet.payload }));
+            },
+            subscribe() {},
+            publish(topic, payload) { socket.emit('mqtt:publish', { topic, payload: String(payload) }); }
+        };
+        socket.on('connect', () => { const el = document.getElementById('connection-status'); if (el) el.textContent = '온라인 연결됨'; });
+        socket.on('disconnect', () => { const el = document.getElementById('connection-status'); if (el) el.textContent = '연결 재시도 중…'; });
+        socket.on('server:error', (message) => alert(message));
+        socket.on('game:feedback', (result) => {
+            const target = globalState.game === 'quiz' ? 'quiz-feedback' : globalState.game === 'ox' ? 'ox-feedback' : null;
+            if (target && document.getElementById(target)) document.getElementById(target).innerText = result.message;
+            if (globalState.game === 'balance' && document.getElementById('updown-status')) document.getElementById('updown-status').innerText = result.status || result.message;
+            if (globalState.game === 'speed' && result.kind === 'correct') { document.getElementById('speed-box').innerText = result.message; document.getElementById('speed-click-btn').classList.add('hidden'); }
+            if (globalState.game === 'drawing' && document.getElementById('draw-guess-input') && result.kind === 'correct') document.getElementById('display-drawing-word').innerText = result.message;
+            if (globalState.game === 'choseong' && result.kind !== 'info') alert(result.message);
+        });
+
+        const TOPIC_STATE = 'samsung_plan_ws_2026_minji_v5/state';
+        const TOPIC_ACTION = 'samsung_plan_ws_2026_minji_v5/action';
+        const TOPIC_DRAW = 'samsung_plan_ws_2026_minji_v5/draw';
+
+        let currentUser = { name: '', table: '', isHost: false };
+        let adminPassword = null;
+        let lastSeenGame = 'login';
+        let updownAttempts = 0;
+        let participantJoined = false;
+        let speedTimer = null;
+
+        let globalState = {
+            game: 'lobby',
+            scores: {},
+            players: [],
+            drawer: null,
+            drawingWord: '칼퇴근',
+            secretNumber: 45,
+            quizIndex: 0,
+            oxIndex: 0,
+            quizzes: [
+                { q: "전략기획팀의 주력 업무가 아닌 것은?", choices: ["전략 수립", "기획실 운영", "직접 민원 응대", "경영 지원"], answer: 2 },
+                { q: "더플라잉팬레드에서 가장 먼저 할 일은?", choices: ["메뉴판 정독", "게임 승리하기", "업무 보고하기", "멍 때리기"], answer: 1 }
+            ],
+            oxQuizzes: [
+                { q: "사당동에 위치한 더플라잉팬레드는 회식 장소로 완벽하다?", answer: "O" },
+                { q: "오늘 워크샵에서 우승한 테이블은 칼퇴 특권이 주어진다?", answer: "O" }
+            ],
+            choseongList: [
+                { target: "ㄱ ㅈ", answer: "기획조정" },
+                { target: "ㅅ ㅅ ㅈ ㄱ", answer: "삼성증권" }
+            ]
+        };
+        for(let i=1; i<=13; i++) globalState.scores[`Table ${i}`] = 0;
+
+        // Check localStorage for saved session
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedTable = localStorage.getItem('ws_table');
+            const savedName = localStorage.getItem('ws_name');
+            if (savedTable && savedName) {
+                // 이전 입력은 폼에만 복원합니다. 매 접속 시 입장하기를 눌러야 합니다.
+                document.getElementById('select-table').value = savedTable;
+                document.getElementById('input-nickname').value = savedName;
+            }
+        });
+
+        client.on('connect', () => {
+            client.subscribe(TOPIC_STATE);
+            client.subscribe(TOPIC_ACTION);
+            client.subscribe(TOPIC_DRAW);
+            // If already logged in, republish join
+            if (currentUser.isHost && adminPassword) socket.emit('admin:auth', adminPassword, () => {});
+            else if (participantJoined && currentUser.table && currentUser.name && !currentUser.isHost) {
+                client.publish(TOPIC_ACTION, JSON.stringify({ type: 'JOIN', player: currentUser }));
+            }
+        });
+
+        client.on('message', (topic, message) => {
+            const dataStr = message.toString();
+            if (topic === TOPIC_STATE) {
+                const nextState = JSON.parse(dataStr);
+                if (currentUser.isHost) { globalState = nextState; updateLobbyUI(); if (globalState.game === 'drawing') updateDrawerUI(); }
+                else if (participantJoined) applyStateToParticipant(nextState);
+                else { globalState = nextState; showLoginOnly(); }
+            }
+            if (topic === TOPIC_ACTION && currentUser.isHost) {
+                const action = JSON.parse(dataStr);
+                if (action.type === 'JOIN') addAdminLog(`👋 입장: [${action.player.table}] ${action.player.name}`, 'text-cyan-300');
+                if (action.type === 'CORRECT') addAdminLog(`✅ 정답! [${action.table}] ${action.name} (+${action.score}점)`, 'text-emerald-400');
+                if (action.type === 'WRONG') addAdminLog(`❌ 오답: [${action.table}] ${action.name} (입력: ${action.detail || ''})`, 'text-rose-400');
+                if (action.type === 'SPEED_CLICK') addAdminLog(`⚡ 스피드 1등! [${action.table}] ${action.name} (+${action.score}점)`, 'text-yellow-300');
+                updateLobbyUI();
+            }
+            if (topic === TOPIC_DRAW && (dataStr === 'CLEAR' || !canIDraw())) renderCanvasFromData(dataStr);
+        });
+
+        function triggerQuestionResultModal() {
+            const qIdx = globalState.quizIndex || 0;
+            const currentQuiz = globalState.quizzes[qIdx] || { q: "진행 중인 퀴즈", choices: [], answer: 0 };
+            const correctChoiceText = currentQuiz.choices ? currentQuiz.choices[currentQuiz.answer] : currentQuiz.answer;
+
+            const logBox = document.getElementById('admin-log-container');
+            let recentCorrect = [];
+            if(logBox) {
+                const items = logBox.getElementsByClassName('log-item');
+                for(let item of items) {
+                    if(item.innerText.includes('정답!')) {
+                        recentCorrect.push(item.innerText);
+                    }
+                }
+            }
+
+            const sortedScores = Object.entries(globalState.scores).sort((a, b) => b[1] - a[1]);
+            const rankingHtml = sortedScores.slice(0, 5).map(([tbl, s], i) => `<div class="text-yellow-300">${i+1}위: ${tbl} (${s}점)</div>`).join('');
+
+            const contentEl = document.getElementById('round-result-content');
+            contentEl.innerHTML = `
+                <div class="text-cyan-300 font-black mb-2">📌 정답: <span class="text-white">${correctChoiceText}</span></div>
+                <div class="text-yellow-300 font-black mb-1">🏆 현재 테이블 순위 TOP 5:</div>
+                <div class="mb-3 space-y-0.5">${rankingHtml}</div>
+                <div class="text-emerald-400 font-black mb-1">✅ 정답 맞힌 동료들:</div>
+                <div class="max-h-24 overflow-y-auto space-y-0.5">${recentCorrect.length > 0 ? recentCorrect.map(l => `<div class="text-slate-200">• ${l}</div>`).join('') : '<div class="text-slate-400">기록 없음</div>'}</div>
+            `;
+
+            document.getElementById('round-result-modal').classList.remove('hidden');
+        }
+
+        function triggerRoundResultModal() {
+            const logBox = document.getElementById('admin-log-container');
+            let correctLogs = [];
+            if(logBox) {
+                const items = logBox.getElementsByClassName('log-item');
+                for(let item of items) {
+                    if(item.innerText.includes('정답!') || item.innerText.includes('스피드 1등!')) {
+                        correctLogs.push(item.innerText);
+                    }
+                }
+            }
+            
+            const contentEl = document.getElementById('round-result-content');
+            if(correctLogs.length > 0) {
+                contentEl.innerHTML = '<p class="text-yellow-300 text-xs mb-1">🎯 이번 라운드 정답자 명단:</p>' + correctLogs.map(l => `<div class="text-emerald-400">• ${l}</div>`).join('');
+            } else {
+                contentEl.innerHTML = '<div class="text-slate-400 text-center">이번 라운드 정답 기록이 없습니다.</div>';
+            }
+            
+            document.getElementById('round-result-modal').classList.remove('hidden');
+            client.publish(TOPIC_ACTION, JSON.stringify({ type: 'SHOW_RESULT', logs: correctLogs }));
+        }
+
+        function closeRoundResultModal() {
+            document.getElementById('round-result-modal').classList.add('hidden');
+        }
+
+        function triggerAdminPrompt() {
+            const pwd = prompt('👑 기획실 마스터 비밀번호를 입력하세요.');
+            if (pwd === null) return;
+            socket.emit('admin:auth', pwd, (result) => {
+                if (!result || !result.ok) { alert('관리자 인증 실패: 비밀번호를 확인하세요.'); return; }
+                if (result.state) globalState = result.state;
+                adminPassword = pwd;
+                currentUser.isHost = true; currentUser.name = '👑 마스터'; currentUser.table = '운영진';
+                document.getElementById('screen-login').classList.add('hidden');
+                document.getElementById('host-panel').classList.remove('hidden');
+                document.getElementById('admin-live-dashboard').classList.remove('hidden');
+                document.getElementById('admin-live-dashboard').classList.add('flex');
+                addAdminLog('👑 마스터 컨트롤 가동 완료', 'text-pink-400'); initQuizSelect();
+                client.publish(TOPIC_STATE, JSON.stringify(globalState)); updateLobbyUI();
+            });
+        }
+
+        function switchAdminTab(tabName) {
+            document.querySelectorAll('.admin-tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('[id^="tab-btn-"]').forEach(btn => {
+                btn.classList.remove('bg-cyan-500', 'text-slate-950');
+                btn.classList.add('text-slate-300');
+            });
+
+            const targetPanel = document.getElementById('admin-panel-' + tabName);
+            const targetBtn = document.getElementById('tab-btn-' + tabName);
+            if(targetPanel) targetPanel.classList.remove('hidden');
+            if(targetBtn) {
+                targetBtn.classList.remove('text-slate-300');
+                targetBtn.classList.add('bg-cyan-500', 'text-slate-950');
+            }
+        }
+
+        function addAdminLog(msg, colorClass) {
+            const logBox = document.getElementById('admin-log-container');
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+            if(logBox.innerHTML.includes("아직 수신된 액션이 없습니다")) logBox.innerHTML = '';
+            const p = document.createElement('p');
+            p.className = `log-item ${colorClass} bg-slate-800/50 p-1 rounded`;
+            p.innerHTML = `<span class="text-slate-400 text-[10px] mr-1">[${timeStr}]</span> ${msg}`;
+            logBox.prepend(p);
+            if(logBox.children.length > 50) logBox.removeChild(logBox.lastChild);
+        }
+
+        function clearAdminLog() {
+            document.getElementById('admin-log-container').innerHTML = '<div class="text-slate-500 text-center pt-2">아직 수신된 액션이 없습니다.</div>';
+        }
+
+        function masterTriggerGame(gameType) {
+            globalState.roundId = (globalState.roundId || 0) + 1;
+            globalState.game = gameType;
+            if (gameType === 'quiz') globalState.quizIndex = 0;
+            if (gameType === 'ox') globalState.oxIndex = 0;
+            addAdminLog(`🚀 '${gameType}' 모드 동기화 완료`, 'text-cyan-300');
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+
+        function adminNextQuiz() {
+            globalState.quizIndex = (globalState.quizIndex || 0) + 1;
+            addAdminLog(`➡️ 퀴즈 다음 문제로 진행`, 'text-cyan-300');
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+        function adminNextOx() {
+            globalState.oxIndex = (globalState.oxIndex || 0) + 1;
+            addAdminLog(`➡️ OX 다음 문제로 진행`, 'text-purple-300');
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+
+        function adminAdjustScore() {
+            const tbl = document.getElementById('admin-target-table').value;
+            const sVal = parseInt(document.getElementById('admin-score-input').value);
+            if (isNaN(sVal)) return;
+            globalState.scores[tbl] += sVal;
+            addAdminLog(`🎯 [강제조절] ${tbl} ${sVal}점 반영됨`, 'text-yellow-300');
+            document.getElementById('admin-score-input').value = '';
+            updateLobbyUI();
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+
+        function initQuizSelect() {
+            const sel = document.getElementById('admin-quiz-select');
+            if(!sel) return;
+            sel.innerHTML = '<option value="" disabled selected>수정할 퀴즈 선택</option>';
+            globalState.quizzes.forEach((q, i) => {
+                sel.innerHTML += `<option value="${i}">문제 ${i+1}: ${q.q.substring(0, 14)}...</option>`;
+            });
+        }
+
+        function loadQuizToAdminEdit() {
+            const idx = document.getElementById('admin-quiz-select').value;
+            if(idx === "") return;
+            const q = globalState.quizzes[idx];
+            document.getElementById('admin-q-text').value = q.q;
+            document.getElementById('admin-q-c1').value = q.choices[0] || '';
+            document.getElementById('admin-q-c2').value = q.choices[1] || '';
+            document.getElementById('admin-q-c3').value = q.choices[2] || '';
+            document.getElementById('admin-q-c4').value = q.choices[3] || '';
+            document.getElementById('admin-q-ans').value = q.answer + 1;
+        }
+
+        function adminSaveQuizEdit() {
+            const idx = document.getElementById('admin-quiz-select').value;
+            if(idx === "") { alert('수정할 퀴즈를 선택해주세요!'); return; }
+            const qText = document.getElementById('admin-q-text').value.trim();
+            const c1 = document.getElementById('admin-q-c1').value.trim();
+            const c2 = document.getElementById('admin-q-c2').value.trim();
+            const c3 = document.getElementById('admin-q-c3').value.trim();
+            const c4 = document.getElementById('admin-q-c4').value.trim();
+            const ans = parseInt(document.getElementById('admin-q-ans').value) - 1;
+            if(!qText || !c1 || !c2) { alert('질문과 보기 1, 2는 입력해주세요!'); return; }
+            const choices = [c1, c2]; if(c3) choices.push(c3); if(c4) choices.push(c4);
+            if (!Number.isInteger(ans) || ans < 0 || ans >= choices.length) { alert('정답 번호는 입력된 보기 범위 안에서 선택하세요.'); return; }
+            globalState.quizzes[idx] = { q: qText, choices, answer: ans };
+            addAdminLog(`📝 퀴즈 수정됨: ${qText}`, 'text-emerald-300');
+            alert('퀴즈가 성공적으로 수정되었습니다!');
+            initQuizSelect();
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+
+        function deleteQuizItem() {
+            const idx = document.getElementById('admin-quiz-select').value;
+            if(idx === "") { alert('삭제할 퀴즈를 선택해주세요!'); return; }
+            if(globalState.quizzes.length <= 1) { alert('최소 1개의 문제는 남아있어야 합니다!'); return; }
+            globalState.quizzes.splice(idx, 1);
+            addAdminLog(`🗑️ 퀴즈 삭제됨`, 'text-rose-400');
+            alert('문제가 삭제되었습니다.');
+            initQuizSelect();
+            document.getElementById('admin-q-text').value = '';
+            document.getElementById('admin-q-c1').value = '';
+            document.getElementById('admin-q-c2').value = '';
+            document.getElementById('admin-q-c3').value = '';
+            document.getElementById('admin-q-c4').value = '';
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+
+        function adminAddQuiz() {
+            const q = document.getElementById('admin-q-text').value.trim();
+            const c1 = document.getElementById('admin-q-c1').value.trim();
+            const c2 = document.getElementById('admin-q-c2').value.trim();
+            const c3 = document.getElementById('admin-q-c3').value.trim();
+            const c4 = document.getElementById('admin-q-c4').value.trim();
+            const ans = parseInt(document.getElementById('admin-q-ans').value) - 1;
+            if(!q || !c1 || !c2) { alert('질문과 보기 1, 2는 입력해주세요!'); return; }
+            const choices = [c1, c2]; if(c3) choices.push(c3); if(c4) choices.push(c4);
+            if (!Number.isInteger(ans) || ans < 0 || ans >= choices.length) { alert('정답 번호는 입력된 보기 범위 안에서 선택하세요.'); return; }
+            globalState.quizzes.push({ q, choices, answer: ans });
+            addAdminLog(`📝 신규 퀴즈 추가됨: ${q}`, 'text-emerald-300');
+            alert('새로운 퀴즈가 추가되었습니다!');
+            initQuizSelect();
+            document.getElementById('admin-q-text').value = '';
+            document.getElementById('admin-q-c1').value = '';
+            document.getElementById('admin-q-c2').value = '';
+            document.getElementById('admin-q-c3').value = '';
+            document.getElementById('admin-q-c4').value = '';
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+
+        function adminSaveChoseong() {
+            const t = document.getElementById('admin-cho-target').value.trim();
+            const a = document.getElementById('admin-cho-ans').value.trim();
+            if(!t || !a) { alert('초성과 정답을 입력하세요!'); return; }
+            globalState.choseongList[0] = { target: t, answer: a };
+            addAdminLog(`⚡ 초성 문제 변경: ${t} (${a})`, 'text-blue-300');
+            alert('초성 문제가 변경되었습니다!');
+            document.getElementById('admin-cho-target').value = '';
+            document.getElementById('admin-cho-ans').value = '';
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+
+        function adminAddOx() {
+            const q = document.getElementById('admin-ox-q').value.trim();
+            const answer = document.getElementById('admin-ox-ans').value;
+            if(!q) { alert('OX 질문을 입력하세요!'); return; }
+            globalState.oxQuizzes.push({ q, answer });
+            addAdminLog(`⭕❌ OX 문제 추가: ${q} (${answer})`, 'text-purple-300');
+            alert('OX 문제가 추가되었습니다!');
+            document.getElementById('admin-ox-q').value = '';
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+
+        function adminSaveSecretNum() {
+            const num = parseInt(document.getElementById('admin-secret-num').value);
+            if(isNaN(num) || num < 1 || num > 100) { alert('1~100 사이 숫자를 입력하세요!'); return; }
+            globalState.secretNumber = num;
+            addAdminLog(`⚖️ 업다운 비밀 정답 설정: ${num}`, 'text-rose-400');
+            alert(`업다운 정답이 ${num}으로 설정되었습니다!`);
+            document.getElementById('admin-secret-num').value = '';
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+
+        function showLoginOnly() {
+            if (currentUser.isHost || participantJoined) return;
+            document.querySelectorAll('.screen').forEach(el => el.classList.add('hidden'));
+            document.getElementById('screen-login').classList.remove('hidden');
+        }
+        function changeParticipant() {
+            participantJoined = false;
+            currentUser.name = ''; currentUser.table = '';
+            localStorage.removeItem('ws_table'); localStorage.removeItem('ws_name');
+            document.getElementById('select-table').value = '';
+            document.getElementById('input-nickname').value = '';
+            showLoginOnly();
+        }
+        function joinGame() {
+            const tbl = document.getElementById('select-table').value;
+            const nm = document.getElementById('input-nickname').value.trim();
+            if (!tbl || !nm) { alert('테이블과 닉네임을 입력하세요!'); return; }
+            currentUser.table = tbl; currentUser.name = nm;
+            participantJoined = true;
+            document.getElementById('lobby-identity').textContent = `${tbl.replace('Table ', '')}번 테이블 · ${nm}`;
+            
+            // Save to localStorage
+            localStorage.setItem('ws_table', tbl);
+            localStorage.setItem('ws_name', nm);
+
+            client.publish(TOPIC_ACTION, JSON.stringify({ type: 'JOIN', player: currentUser }));
+            document.getElementById('screen-login').classList.add('hidden');
+            document.getElementById('screen-lobby').classList.remove('hidden');
+            document.getElementById('wait-msg').classList.remove('hidden');
+            applyStateToParticipant(globalState);
+        }
+
+        function applyStateToParticipant(newState) {
+            if (!participantJoined) { globalState = newState; showLoginOnly(); return; }
+            const previous = globalState;
+            const gameChanged = lastSeenGame !== newState.game;
+            const quizChanged = gameChanged || previous.quizIndex !== newState.quizIndex || JSON.stringify(previous.quizzes) !== JSON.stringify(newState.quizzes);
+            const oxChanged = gameChanged || previous.oxIndex !== newState.oxIndex || JSON.stringify(previous.oxQuizzes) !== JSON.stringify(newState.oxQuizzes);
+            const choseongChanged = gameChanged || JSON.stringify(previous.choseongList) !== JSON.stringify(newState.choseongList);
+            const balanceChanged = gameChanged || previous.secretNumber !== newState.secretNumber;
+            const speedChanged = gameChanged || previous.roundId !== newState.roundId;
+            const drawingChanged = gameChanged || JSON.stringify(previous.drawer) !== JSON.stringify(newState.drawer) || previous.drawingWord !== newState.drawingWord;
+            globalState = newState;
+            if (gameChanged) {
+                if (speedTimer) { clearTimeout(speedTimer); speedTimer = null; }
+                lastSeenGame = globalState.game;
+                document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+                const targetScreen = document.getElementById('screen-' + globalState.game);
+                if (targetScreen) targetScreen.classList.remove('hidden');
+            }
+            if (globalState.game === 'quiz' && quizChanged) loadQuizUI();
+            if (globalState.game === 'ox' && oxChanged) loadOxUI();
+            if (globalState.game === 'drawing' && gameChanged) initDrawingCanvas();
+            if (globalState.game === 'balance' && balanceChanged) initBalanceUI();
+            if (globalState.game === 'speed' && speedChanged) initSpeedUI();
+            if (globalState.game === 'choseong' && choseongChanged) initChoseongUI();
+            updateLobbyUI();
+            if (globalState.game === 'drawing' && drawingChanged) updateDrawerUI();
+        }
+
+        function updateLobbyUI() {
+            if(currentUser.isHost) {
+                const sel = document.getElementById('admin-drawer-select');
+                if (sel) {
+                    const currentVal = sel.value;
+                    sel.innerHTML = '<option value="">출제자 선택 (미지정)</option>';
+                    globalState.players.forEach((p, i) => { sel.innerHTML += `<option value="${i}">[${p.table}] ${p.name}</option>`; });
+                    if (Number(currentVal) < globalState.players.length) sel.value = currentVal;
+                }
+            }
+            const pCount = document.getElementById('player-count');
+            if(pCount) pCount.innerText = globalState.players.length;
+
+            const playerListEl = document.getElementById('player-list');
+            if(playerListEl) playerListEl.innerHTML = globalState.players.map(p => `<li>• [${p.table}] ${p.name}</li>`).join('');
+            
+            const sorted = Object.entries(globalState.scores).sort((a, b) => b[1] - a[1]);
+            const rankingsEl = document.getElementById('lobby-rankings');
+            if(rankingsEl) rankingsEl.innerHTML = sorted.slice(0, 5).map(([tbl, s], idx) => `<div>${idx + 1}위 ${tbl} (${s}점)</div>`).join('');
+
+            const myScore = globalState.scores[currentUser.table] || 0;
+            ['table-score-1', 'table-score-2', 'table-score-ox'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.innerText = myScore;
+            });
+        }
+
+        function canIDraw() {
+            if (currentUser.isHost) return true;
+            if (!globalState.drawer) return false;
+            return (currentUser.table === globalState.drawer.table && currentUser.name === globalState.drawer.name);
+        }
+
+        function applyDrawerEdit() {
+            const idx = document.getElementById('admin-drawer-select').value;
+            if(idx === "") {
+                globalState.drawer = null;
+                addAdminLog(`🎨 출제자 지정 해제됨`, 'text-amber-300');
+            } else {
+                globalState.drawer = globalState.players[idx];
+                addAdminLog(`🎨 출제자 지정: [${globalState.drawer.table}] ${globalState.drawer.name}`, 'text-amber-300');
+                client.publish(TOPIC_DRAW, 'CLEAR');
+            }
+            updateDrawerUI();
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+
+        function applyDrawWordEdit() {
+            const w = document.getElementById('edit-draw-word').value.trim();
+            if(!w) return;
+            globalState.drawingWord = w;
+            addAdminLog(`🎨 제시어 변경: ${w}`, 'text-amber-300');
+            document.getElementById('edit-draw-word').value = '';
+            updateDrawerUI();
+            client.publish(TOPIC_STATE, JSON.stringify(globalState));
+        }
+
+        function updateDrawerUI() {
+            const nameEl = document.getElementById('display-drawer-name');
+            if(nameEl) nameEl.innerText = globalState.drawer ? `${globalState.drawer.name} 님` : "지정 대기중";
+
+            const wordEl = document.getElementById('display-drawing-word');
+            if(wordEl) {
+                if(currentUser.isHost || canIDraw()) {
+                    wordEl.innerText = `[ ${globalState.drawingWord} ]`;
+                    wordEl.className = "text-pink-400";
+                } else {
+                    wordEl.innerText = `[ 🔒 비밀 제시어 ]`;
+                    wordEl.className = "text-slate-400";
+                }
+            }
+            const toolEl = document.getElementById('drawer-tools');
+            if(toolEl) toolEl.style.display = canIDraw() ? 'block' : 'none';
+        }
+
+        function renderCanvasFromData(dataStr) {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            if(dataStr === 'CLEAR') {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            } else {
+                const img = new Image();
+                img.onload = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0); };
+                img.src = dataStr;
+            }
+        }
+
+        function initDrawingCanvas() {
+            updateDrawerUI();
+            const canvas = document.getElementById('canvas'); 
+            const ctx = canvas.getContext('2d');
+            ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
+            let drawing = false;
+
+            const startDraw = (x, y) => { if(!canIDraw()) return; drawing = true; ctx.beginPath(); ctx.moveTo(x, y); };
+            const draw = (x, y) => { if(!drawing || !canIDraw()) return; ctx.lineTo(x, y); ctx.stroke(); };
+            const stopDraw = () => { if(drawing && canIDraw()) client.publish(TOPIC_DRAW, canvas.toDataURL()); drawing = false; };
+
+            canvas.onmousedown = (e) => startDraw(e.offsetX, e.offsetY);
+            canvas.onmousemove = (e) => draw(e.offsetX, e.offsetY);
+            canvas.onmouseup = stopDraw; canvas.onmouseleave = stopDraw;
+
+            const canvasPos = (touch) => { const rect = canvas.getBoundingClientRect(); return [(touch.clientX - rect.left) * canvas.width / rect.width, (touch.clientY - rect.top) * canvas.height / rect.height]; };
+            canvas.ontouchstart = (e) => { if(!canIDraw()) return; e.preventDefault(); startDraw(...canvasPos(e.touches[0])); };
+            canvas.ontouchmove = (e) => { if(!canIDraw()) return; e.preventDefault(); draw(...canvasPos(e.touches[0])); };
+            canvas.ontouchend = stopDraw;
+        }
+
+        function clearCanvasEvent() { 
+            if (!canIDraw()) return;
+            client.publish(TOPIC_DRAW, 'CLEAR'); renderCanvasFromData('CLEAR');
+        }
+
+        function submitDrawGuess() {
+            const val = document.getElementById('draw-guess-input').value.trim();
+            if (!val) return;
+            client.publish(TOPIC_ACTION, JSON.stringify({ type: 'DRAW_GUESS', table: currentUser.table, name: currentUser.name, value: val }));
+            document.getElementById('draw-guess-input').value = '';
+        }
+
+        function loadQuizUI() {
+            const idx = globalState.quizIndex || 0;
+            if(idx >= globalState.quizzes.length) { 
+                document.getElementById('quiz-question').innerText = "퀴즈 종료! 수고하셨습니다 👏"; 
+                document.getElementById('quiz-choices').innerHTML = ""; 
+                return; 
+            }
+            const q = globalState.quizzes[idx];
+            document.getElementById('quiz-progress').innerText = `문제 ${idx+1} / ${globalState.quizzes.length}`;
+            document.getElementById('quiz-question').innerText = q.q;
+            document.getElementById('quiz-feedback').innerText = "";
+            document.getElementById('quiz-choices').innerHTML = q.choices.map((c, i) => `<button onclick="answerQuiz(${i}, ${idx})" class="w-full py-3 bg-slate-900 hover:bg-slate-800 border-3 border-cyan-400 font-black rounded-2xl text-sm text-cyan-200 geo-btn shadow-[3px_3px_0px_#c084fc]">${i+1}. ${c}</button>`).join('');
+        }
+        function answerQuiz(idx, qIdx) {
+            client.publish(TOPIC_ACTION, JSON.stringify({ type: 'QUIZ_ANSWER', table: currentUser.table, name: currentUser.name, choice: idx, qIdx }));
+            document.querySelectorAll('#quiz-choices button').forEach(b => b.disabled = true);
+            document.getElementById('quiz-feedback').innerText = '답안 제출 완료. 결과를 기다리세요…';
+        }
+
+        function initChoseongUI() { document.getElementById('choseong-target').innerText = globalState.choseongList[0].target; document.getElementById('choseong-input').value = ''; }
+        function submitChoseong() {
+            const val = document.getElementById('choseong-input').value.trim();
+            if (!val) return;
+            client.publish(TOPIC_ACTION, JSON.stringify({ type: 'CHOSEONG_ANSWER', table: currentUser.table, name: currentUser.name, value: val }));
+        }
+
+        function loadOxUI() {
+            const idx = globalState.oxIndex || 0;
+            if(idx >= globalState.oxQuizzes.length) { 
+                document.getElementById('ox-question').innerText = "OX 퀴즈 종료!"; 
+                document.getElementById('ox-feedback').innerText = "";
+                return; 
+            }
+            document.getElementById('ox-progress').innerText = `OX 문제 ${idx+1} / ${globalState.oxQuizzes.length}`;
+            document.getElementById('ox-question').innerText = globalState.oxQuizzes[idx].q;
+            document.getElementById('ox-feedback').innerText = "";
+        }
+        function answerOx(choice) {
+            const idx = globalState.oxIndex || 0;
+            client.publish(TOPIC_ACTION, JSON.stringify({ type: 'OX_ANSWER', table: currentUser.table, name: currentUser.name, choice, qIdx: idx }));
+            document.getElementById('ox-feedback').innerText = '답안 제출 완료. 결과를 기다리세요…';
+        }
+
+        function initBalanceUI() {
+            updownAttempts = 0;
+            document.getElementById('updown-status').innerText = "1~100 사이 숫자를 입력하세요!";
+            document.getElementById('updown-input').value = '';
+        }
+        function submitUpDown() {
+            const val = parseInt(document.getElementById('updown-input').value, 10);
+            if (isNaN(val) || val < 1 || val > 100) { alert('1~100 사이 숫자를 입력하세요.'); return; }
+            client.publish(TOPIC_ACTION, JSON.stringify({ type: 'UPDOWN_GUESS', table: currentUser.table, name: currentUser.name, value: val }));
+        }
+
+        function initSpeedUI() {
+            const box = document.getElementById('speed-box');
+            const btn = document.getElementById('speed-click-btn');
+            box.innerText = "준비..."; 
+            box.className = "py-10 bg-slate-900 rounded-2xl border-3 border-cyan-400 font-black text-slate-400 text-base shadow-[3px_3px_0px_#c084fc]";
+            btn.classList.add('hidden');
+            speedTimer = setTimeout(() => {
+                if (!participantJoined || globalState.game !== 'speed') return;
+                box.innerText = "지금 누르세요!";
+                box.classList.remove('bg-slate-900', 'text-slate-400'); 
+                box.classList.add('bg-pink-500', 'text-white');
+                btn.classList.remove('hidden');
+            }, Math.random() * 2000 + 1000);
+        }
+        function clickSpeed() {
+            client.publish(TOPIC_ACTION, JSON.stringify({ type: 'SPEED_CLICK', table: currentUser.table, name: currentUser.name }));
+            document.getElementById('speed-click-btn').classList.add('hidden');
+        }
+    </script>
+
+    <!-- 라운드 정답 발표 및 결과 모달 -->
+    <div id="round-result-modal" class="fixed inset-0 bg-slate-950/85 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-slate-900 border-4 border-yellow-400 rounded-2xl p-6 w-full max-w-sm space-y-3 text-center shadow-[6px_6px_0px_#c084fc]">
+            <h3 class="text-xl font-black text-yellow-300">🏆 라운드 정답 및 순위 발표</h3>
+            <div id="round-result-content" class="text-sm font-black text-slate-200 bg-slate-950 p-3 rounded-xl border border-cyan-400 max-h-48 overflow-y-auto text-left space-y-1">
+                정답자 명단이 여기에 표시됩니다.
+            </div>
+            <button type="button" onclick="closeRoundResultModal()" class="w-full py-2.5 bg-pink-500 hover:bg-pink-600 text-white font-black rounded-xl text-sm geo-btn border-white">확인 완료 (대기실 복귀)</button>
+        </div>
+    </div>
+
+</body>
+</html>
