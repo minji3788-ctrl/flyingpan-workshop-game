@@ -12,7 +12,10 @@ const TOPIC_STATE = 'samsung_plan_ws_2026_minji_v5/state';
 const TOPIC_ACTION = 'samsung_plan_ws_2026_minji_v5/action';
 const TOPIC_DRAW = 'samsung_plan_ws_2026_minji_v5/draw';
 
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(__dirname));
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'flyingpan-workshop-game' }));
 
 const scores = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`Table ${i + 1}`, 0]));
