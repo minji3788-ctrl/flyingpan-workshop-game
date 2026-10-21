@@ -34,6 +34,7 @@ let state = {
 };
 let latestDrawing = 'CLEAR';
 let speedWinner = null;
+let quizAdvanceTimer = null;
 const scoredCorrect = new Set();
 const speedFirstClick = new Set();
 
@@ -121,7 +122,11 @@ io.on('connection', (socket) => {
         choseongList: Array.isArray(incoming.choseongList) ? incoming.choseongList.slice(0, 200) : state.choseongList
       };
       const newRound = Number(state.roundId || 0) !== Number(previous.roundId || 0);
-      if (newRound || state.game !== previousGame) {
+      if (newRound || state.game !== previousGame || state.quizIndex !== previous.quizIndex) {
+  if (quizAdvanceTimer) {
+    clearTimeout(quizAdvanceTimer);
+    quizAdvanceTimer = null;
+  }
         scoredCorrect.clear();
         speedWinner = null;
         if (state.game === 'drawing' && previousGame !== 'drawing') { latestDrawing = 'CLEAR'; emitTopic(TOPIC_DRAW, latestDrawing); }
@@ -190,6 +195,21 @@ io.on('connection', (socket) => {
       if (correct) {
         if (!markCorrectOnce(key)) return;
         scoreTable(table, 10); actionLog('CORRECT', player, 10); feedback(socket, 'correct', '정답! 테이블 점수 +10점 🎉');
+        if (!quizAdvanceTimer) {
+  const currentIndex = state.quizIndex;
+  quizAdvanceTimer = setTimeout(() => {
+    quizAdvanceTimer = null;
+    if (state.game === 'quiz' && state.quizIndex === currentIndex) {
+      if (currentIndex + 1 < state.quizzes.length) {
+        state.quizIndex += 1;
+      } else {
+        state.game = 'lobby';
+      }
+      scoredCorrect.clear();
+      publishState();
+    }
+  }, 10000);
+        }
       } else { actionLog('WRONG', player, 0, q.choices[Number(action.choice)] || '선택 답안'); feedback(socket, 'wrong', '오답입니다. 다시 도전하세요.'); }
       return;
     }
