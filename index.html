@@ -427,15 +427,12 @@
         };
         for(let i=1; i<=13; i++) globalState.scores[`Table ${i}`] = 0;
 
-        // Check localStorage for saved session
+        // 참가자 접속 시 이전 입력값을 복원하지 않습니다.
         window.addEventListener('DOMContentLoaded', () => {
-            const savedTable = localStorage.getItem('ws_table');
-            const savedName = localStorage.getItem('ws_name');
-            if (savedTable && savedName) {
-                // 이전 입력은 폼에만 복원합니다. 매 접속 시 입장하기를 눌러야 합니다.
-                document.getElementById('select-table').value = savedTable;
-                document.getElementById('input-nickname').value = savedName;
-            }
+            localStorage.removeItem('ws_table');
+            localStorage.removeItem('ws_name');
+            document.getElementById('select-table').value = '';
+            document.getElementById('input-nickname').value = '';
         });
 
         client.on('connect', () => {
@@ -960,9 +957,7 @@
             participantJoined = true;
             document.getElementById('lobby-identity').textContent = `${tbl.replace('Table ', '')}번 테이블 · ${nm}`;
             
-            // Save to localStorage
-            localStorage.setItem('ws_table', tbl);
-            localStorage.setItem('ws_name', nm);
+            // 참가자 개인정보는 기기에 저장하지 않습니다.
 
             client.publish(TOPIC_ACTION, JSON.stringify({ type: 'JOIN', player: currentUser }));
             document.getElementById('screen-login').classList.add('hidden');
