@@ -583,11 +583,29 @@
             client.publish(TOPIC_ACTION,JSON.stringify({type:'CLOSE_MID_SCORE'}));
             addAdminLog('✖ 중간 스코어 닫기','text-cyan-300');
         }
+        // A participant may dismiss the shared scoreboard locally without changing game state.
+        let midScoreDismissedLocally = false;
+        let midScoreWasVisible = false;
+        function dismissMyMidScore(){
+            midScoreDismissedLocally = true;
+            renderMidScore();
+        }
+        function closeMidScoreFromOverlay(){
+            if(currentUser.isHost) closeMidScore();
+            else dismissMyMidScore();
+        }
         function renderMidScore(){
             const overlay=document.getElementById('mid-score-overlay');
             if(!overlay)return;
-            overlay.classList.toggle('hidden',!globalState.midScoreVisible);
-            if(!globalState.midScoreVisible)return;
+            const sharedVisible=Boolean(globalState.midScoreVisible);
+            if(sharedVisible&&!midScoreWasVisible)midScoreDismissedLocally=false;
+            if(!sharedVisible)midScoreDismissedLocally=false;
+            midScoreWasVisible=sharedVisible;
+            const visible=sharedVisible&&!midScoreDismissedLocally;
+            overlay.classList.toggle('hidden',!visible);
+            if(!visible)return;
+            const closeButton=document.getElementById('mid-score-close-button');
+            if(closeButton)closeButton.textContent=currentUser.isHost?'✕ 전체 스코어 닫기':'✕ 내 화면만 닫기';
             const scores=globalState.scores||{};
             const ordered=Array.from({length:13},(_,i)=>({table:'Table '+(i+1),score:Number(scores['Table '+(i+1)]||0)}))
                 .sort((a,b)=>b.score-a.score||Number(a.table.slice(6))-Number(b.table.slice(6)));
@@ -1244,10 +1262,11 @@
 
 <div id="mid-score-overlay" class="fixed inset-0 z-[1100] hidden bg-slate-950/95 overflow-y-auto p-4">
     <div class="max-w-md mx-auto my-5 rounded-2xl border-4 border-cyan-400 bg-slate-950 p-4 shadow-xl">
+        <button id="mid-score-close-button" type="button" onclick="closeMidScoreFromOverlay()" class="sticky top-2 z-10 w-full mb-3 py-3 bg-pink-500 text-white font-black text-base rounded-xl border-2 border-white shadow-lg">✕ 닫기</button>
         <h2 class="text-center text-2xl font-black text-yellow-300 mb-2">🏆 지구오락실 중간 스코어</h2>
         <p class="text-center text-xs text-slate-300 mb-4">13개 테이블 누적 점수 · 동점 공동 순위</p>
         <div id="mid-score-rows" class="space-y-1.5 text-sm font-black text-white"></div>
-        <p class="text-center text-xs text-slate-400 mt-4">👑 관리자가 화면을 닫으면 게임으로 돌아갑니다.</p>
+        <p class="text-center text-xs text-slate-400 mt-4">참가자는 본인 화면만 닫을 수 있으며, 관리자는 전체 공개를 종료할 수 있습니다.</p>
     </div>
 </div>
 
