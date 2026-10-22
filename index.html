@@ -108,6 +108,10 @@
 
             <!-- 👑 2-1. 관리자 전용 마스터 컨트롤 및 게임별 맞춤형 편집 패널 -->
             <div id="host-panel" class="screen hidden space-y-3 text-left">
+                <div class="sticky top-0 z-50 grid grid-cols-2 gap-2 rounded-xl bg-slate-950 p-2 border-2 border-cyan-400 shadow-xl" id="mc-mode-tabs">
+                    <button type="button" onclick="mcOpenMode('play')" class="rounded-lg bg-emerald-400 text-slate-950 font-black py-3 text-sm" id="mc-mode-play">🎮 게임 진행</button>
+                    <button type="button" onclick="mcOpenMode('edit')" class="rounded-lg bg-amber-400 text-slate-950 font-black py-3 text-sm" id="mc-mode-edit">✏️ 문제 편집</button>
+                </div>
                 <div class="rounded-2xl border-2 border-cyan-400 bg-slate-950 p-3 space-y-3 sticky top-0 z-20 shadow-xl" id="mc-quick-controls">
                     <div class="flex justify-between items-center gap-2"><strong class="text-cyan-300 text-base">👑 MC 퀵 진행</strong><span id="mc-phase" class="text-[11px] rounded-lg bg-slate-800 px-2 py-1 text-yellow-300">대기실</span></div>
                     <div class="flex justify-between items-center gap-2"><span id="mc-game-name" class="font-black text-white">게임을 선택하세요</span><span id="mc-question-count" class="text-xs text-slate-300">진행 대기</span></div>
@@ -1189,5 +1193,20 @@
 </div>
 
 <div id="round-timer-banner" style="display:none;position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:1000;background:#0f172a;color:#67e8f9;border:2px solid #22d3ee;border-radius:14px;padding:8px 16px;text-align:center;box-shadow:0 4px 16px #0009;min-width:200px;font-weight:bold"><div id="round-timer-name" style="font-size:12px">남은 시간</div><div id="round-timer-clock" style="font-size:30px;font-variant-numeric:tabular-nums">00:00</div><div id="round-timer-note" style="font-size:11px;color:#cbd5e1"></div><div id="round-reveal-text" style="font-size:13px;color:#fde68a;white-space:pre-wrap"></div></div>
+<script>
+        function mcOpenMode(mode) {
+            const advanced = document.getElementById('mc-advanced');
+            const quick = document.getElementById('mc-quick-controls');
+            if (!advanced || !quick) return;
+            if (mode === 'edit') {
+                advanced.open = true;
+                // 게임별 편집 탭을 화면 상단 가까이 이동
+                const editor = document.getElementById('tab-btn-quiz') || document.getElementById('admin-panel-quiz') || advanced;
+                editor.scrollIntoView({behavior:'smooth', block:'center'});
+            } else {
+                quick.scrollIntoView({behavior:'smooth', block:'start'});
+            }
+        }
+        </script>
 </body>
 </html>
