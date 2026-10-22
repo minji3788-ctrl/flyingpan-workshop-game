@@ -1197,14 +1197,24 @@
         function mcOpenMode(mode) {
             const advanced = document.getElementById('mc-advanced');
             const quick = document.getElementById('mc-quick-controls');
-            if (!advanced || !quick) return;
-            if (mode === 'edit') {
-                advanced.open = true;
-                // 게임별 편집 탭을 화면 상단 가까이 이동
-                const editor = document.getElementById('tab-btn-quiz') || document.getElementById('admin-panel-quiz') || advanced;
-                editor.scrollIntoView({behavior:'smooth', block:'center'});
+            const dashboard = document.getElementById('admin-live-dashboard');
+            const host = document.getElementById('host-panel');
+            if (!advanced || !quick || !host) return;
+            const editing = mode === 'edit';
+            quick.classList.toggle('hidden', editing);
+            if (dashboard) dashboard.classList.toggle('hidden', editing);
+            advanced.open = editing;
+            // 편집 모드에서 게임 진행 버튼 대신 편집 폼을 즉시 표시합니다.
+            const playBtn = document.getElementById('mc-mode-play');
+            const editBtn = document.getElementById('mc-mode-edit');
+            if (playBtn) playBtn.classList.toggle('opacity-60', editing);
+            if (editBtn) editBtn.classList.toggle('opacity-60', !editing);
+            if (editing) {
+                if (typeof switchAdminTab === 'function') switchAdminTab('quiz');
+                const target = document.getElementById('tab-btn-quiz') || advanced;
+                requestAnimationFrame(() => target.scrollIntoView({behavior:'smooth',block:'start'}));
             } else {
-                quick.scrollIntoView({behavior:'smooth', block:'start'});
+                requestAnimationFrame(() => host.scrollIntoView({behavior:'smooth',block:'start'}));
             }
         }
         </script>
