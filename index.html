@@ -15,6 +15,15 @@
             font-size: 1.1rem; 
             touch-action: manipulation;
         }
+        /* 드로잉 게임에서만 넓은 작업 공간 사용 */
+        body:has(#screen-drawing:not(.hidden)) #game-shell { max-width: 760px; padding: 12px; }
+        #screen-drawing #canvas {
+            display: block; width: 100%; height: auto; max-width: 720px;
+            aspect-ratio: 4 / 3; touch-action: none; user-select: none;
+            -webkit-user-select: none; -webkit-touch-callout: none;
+            border: 3px solid #f472b6;
+        }
+        #screen-drawing { overscroll-behavior: contain; }
         .geo-card { 
             border: 4px solid #38bdf8; 
             box-shadow: 6px 6px 0px #c084fc; 
@@ -46,7 +55,7 @@
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
 
-    <div class="w-full max-w-md geo-card overflow-hidden p-6 text-center relative flex flex-col max-h-[92vh]">
+    <div id="game-shell" class="w-full max-w-md geo-card overflow-hidden p-6 text-center relative flex flex-col max-h-[92vh]">
 
         <div class="mb-4 flex-shrink-0 bg-gradient-to-r from-purple-700 via-indigo-600 to-cyan-600 text-yellow-300 py-3 px-4 rounded-2xl border-3 border-cyan-400 shadow-[4px_4px_0px_#38bdf8] transform -rotate-1">
             <h1 class="text-3xl font-black tracking-wider text-cyan-200 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">🌍 지구오락실 🌍</h1>
@@ -304,7 +313,7 @@
                     제시어: <span id="display-drawing-word">[ 🔒 비밀 제시어 ]</span>
                 </div>
                 <div class="relative">
-                    <canvas id="canvas" width="280" height="200" class="border-3 border-pink-400 rounded-2xl bg-white mx-auto cursor-crosshair touch-none shadow-[3px_3px_0px_#c084fc]"></canvas>
+                    <canvas id="canvas" width="720" height="540" class="rounded-2xl bg-white mx-auto cursor-crosshair shadow-[3px_3px_0px_#c084fc]" aria-label="드로잉 그림판"></canvas>
                 </div>
                 <div id="drawer-tools" class="hidden text-center">
                     <button onclick="clearCanvasEvent()" class="text-xs px-4 py-1.5 bg-slate-800 rounded-xl font-black text-white geo-btn">그림 지우기 🧹</button>
@@ -1090,14 +1099,29 @@
             const draw = (x, y) => { if(!drawing || !canIDraw()) return; ctx.lineTo(x, y); ctx.stroke(); };
             const stopDraw = () => { if(drawing && canIDraw()) client.publish(TOPIC_DRAW, canvas.toDataURL()); drawing = false; };
 
-            canvas.onmousedown = (e) => startDraw(e.offsetX, e.offsetY);
-            canvas.onmousemove = (e) => draw(e.offsetX, e.offsetY);
-            canvas.onmouseup = stopDraw; canvas.onmouseleave = stopDraw;
-
-            const canvasPos = (touch) => { const rect = canvas.getBoundingClientRect(); return [(touch.clientX - rect.left) * canvas.width / rect.width, (touch.clientY - rect.top) * canvas.height / rect.height]; };
-            canvas.ontouchstart = (e) => { if(!canIDraw()) return; e.preventDefault(); startDraw(...canvasPos(e.touches[0])); };
-            canvas.ontouchmove = (e) => { if(!canIDraw()) return; e.preventDefault(); draw(...canvasPos(e.touches[0])); };
-            canvas.ontouchend = stopDraw;
+            // Pointer Events: 터치/펜/마우스를 같은 좌표계로 처리합니다.
+            const canvasPos = (e) => {
+                const rect = canvas.getBoundingClientRect();
+                return [(e.clientX - rect.left) * canvas.width / rect.width,
+                        (e.clientY - rect.top) * canvas.height / rect.height];
+            };
+            canvas.onpointerdown = (e) => {
+                if(!canIDraw()) return;
+                e.preventDefault();
+                canvas.setPointerCapture(e.pointerId);
+                startDraw(...canvasPos(e));
+            };
+            canvas.onpointermove = (e) => {
+                if(!drawing) return;
+                e.preventDefault();
+                draw(...canvasPos(e));
+            };
+            canvas.onpointerup = (e) => { if(drawing)e.preventDefault(); stopDraw(); };
+            canvas.onpointercancel = stopDraw;
+            canvas.onlostpointercapture = stopDraw;
+            // 재진입 시 기존 터치 핸들러와 중복 실행되지 않도록 정리
+            canvas.ontouchstart = canvas.ontouchmove = canvas.ontouchend = null;
+            canvas.onmousedown = canvas.onmousemove = canvas.onmouseup = canvas.onmouseleave = null;
         }
 
         function clearCanvasEvent() { 
