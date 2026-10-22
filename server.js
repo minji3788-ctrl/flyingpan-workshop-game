@@ -88,6 +88,24 @@ io.on('connection',socket=>{
  socket.data.isAdmin=false;socket.data.player=null;
  socket.emit('mqtt:message',{topic:TOPIC_STATE,payload:JSON.stringify(stateFor(socket))});socket.emit('mqtt:message',{topic:TOPIC_DRAW,payload:latestDrawing});
  socket.on('admin:auth',(password,cb)=>{const ok=password===ADMIN_PASSWORD;if(ok){socket.data.isAdmin=true;socket.emit('mqtt:message',{topic:TOPIC_STATE,payload:JSON.stringify(stateFor(socket))});}if(typeof cb==='function')cb(ok?{ok:true,state:JSON.parse(JSON.stringify(state))}:{ok:false});});
+ socket.on('quiz:submit',(data,reply)=>{
+  const respond=(accepted,message)=>{if(typeof reply==='function')reply({accepted,message});};
+  const player=socket.data.player;
+  if(!player)return respond(false,'참가자 등록이 확인되지 않았습니다. 다시 입장해 주세요.');
+  if(state.game!=='quiz'||!state.quizzes[state.quizIndex]||Number(data?.qIdx)!==state.quizIndex)return respond(false,'현재 진행 중인 문제가 아닙니다.');
+  if(state.roundPhase!=='running'||state.revealed||!state.deadline||Date.now()>=state.deadline)return respond(false,'정답 제출 시간이 종료됐습니다.');
+  const choice=Number(data?.choice),q=state.quizzes[state.quizIndex];
+  if(!Number.isInteger(choice)||choice<0||choice>=q.choices.length)return respond(false,'올바른 보기를 선택해 주세요.');
+  const key=`quiz:${state.quizIndex}:${player.table}`;
+  if(scoredCorrect.has(key))return respond(true,'이미 이 테이블의 정답이 접수됐습니다.');
+  if(choice===Number(q.answer)){
+   const rank=roundWinners.length,points=[20,15,10][rank]||5;
+   award(socket,player,key,points,`정답! 테이블 점수 +${points}점 🎉`);
+   return respond(true,`✅ 정답 접수! +${points}점 🎉`);
+  }
+  log('WRONG',player,0,'객관식');feedback(socket,'wrong','오답입니다.');
+  respond(true,'✅ 답안 접수 완료! (오답)');
+ });
  socket.on('mqtt:publish',packet=>{
   const topic=String(packet?.topic||''),raw=String(packet?.payload??'');
   if(topic===TOPIC_STATE){if(!socket.data.isAdmin)return socket.emit('server:error','관리자 권한이 필요합니다.');let incoming;try{incoming=JSON.parse(raw);}catch{return;}

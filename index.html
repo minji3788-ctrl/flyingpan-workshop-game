@@ -1141,13 +1141,37 @@
             const q = globalState.quizzes[idx];
             document.getElementById('quiz-progress').innerText = `문제 ${idx+1} / ${globalState.quizzes.length}`;
             document.getElementById('quiz-question').innerText = q.q;
+            quizSubmitPending = false; quizSubmittedRound = null;
             document.getElementById('quiz-feedback').innerText = "";
             document.getElementById('quiz-choices').innerHTML = q.choices.map((c, i) => `<button onclick="answerQuiz(${i}, ${idx})" class="w-full py-3 bg-slate-900 hover:bg-slate-800 border-3 border-cyan-400 font-black rounded-2xl text-sm text-cyan-200 geo-btn shadow-[3px_3px_0px_#c084fc]">${i+1}. ${c}</button>`).join('');
         }
+        let quizSubmitPending = false;
+        let quizSubmittedRound = null;
+        function quizRoundKey() { return String(globalState.roundId ?? '') + ':' + String(globalState.quizIndex ?? 0); }
         function answerQuiz(idx, qIdx) {
-            client.publish(TOPIC_ACTION, JSON.stringify({ type: 'QUIZ_ANSWER', table: currentUser.table, name: currentUser.name, choice: idx, qIdx }));
-            document.querySelectorAll('#quiz-choices button').forEach(b => b.disabled = true);
-            document.getElementById('quiz-feedback').innerText = '답안 제출 완료. 결과를 기다리세요…';
+            const feedback = document.getElementById('quiz-feedback');
+            const key = quizRoundKey();
+            if (quizSubmitPending || quizSubmittedRound === key) return;
+            if (!participantJoined || !socket.connected) { feedback.innerText = '⚠️ 서버 연결이 끊겼어요. 연결 후 다시 눌러주세요.'; return; }
+            if (globalState.game !== 'quiz' || Number(qIdx) !== Number(globalState.quizIndex)) { feedback.innerText = '⚠️ 문제가 변경됐어요. 새 문제에서 선택해 주세요.'; return; }
+            if (globalState.roundPhase !== 'running' || globalState.revealed || !globalState.deadline || Date.now() >= Number(globalState.deadline)) {
+                feedback.innerText = '⏰ 제출 시간이 종료됐어요. 관리자에게 다음 문제를 요청하세요.'; return;
+            }
+            quizSubmitPending = true;
+            feedback.innerText = '⏳ 서버에 정답을 제출하는 중…';
+            const buttons = document.querySelectorAll('#quiz-choices button');
+            buttons.forEach((button, i) => { button.disabled = true; button.style.opacity = i === idx ? '1' : '0.55'; });
+            socket.timeout(5000).emit('quiz:submit', { choice: idx, qIdx }, (err, result) => {
+                if (quizRoundKey() !== key) return;
+                quizSubmitPending = false;
+                if (err || !result || !result.accepted) {
+                    feedback.innerText = '⚠️ ' + (result?.message || '서버 응답이 없어요. 연결을 확인하고 다시 선택하세요.');
+                    if (globalState.roundPhase === 'running' && Date.now() < Number(globalState.deadline)) buttons.forEach(button => { button.disabled = false; button.style.opacity = ''; });
+                    return;
+                }
+                quizSubmittedRound = key;
+                feedback.innerText = result.message || '✅ 답안 접수 완료!';
+            });
         }
 
         function initChoseongUI() { const q=globalState.choseongList[globalState.choseongIndex || 0]||{}; document.getElementById('choseong-target').innerText=q.target||''; document.getElementById('choseong-hint').textContent=q.hint||q.explanation||''; document.getElementById('choseong-hint').style.display=(q.hint||q.explanation)?'block':'none'; document.getElementById('choseong-input').value = ''; }
