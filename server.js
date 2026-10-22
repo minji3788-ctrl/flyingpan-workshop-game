@@ -1,23 +1,80 @@
 const path=require('path'),express=require('express'),http=require('http');
 const {Server}=require('socket.io');
+const fs=require('fs'),{Pool}=require('pg');
 const app=express(),server=http.createServer(app),io=new Server(server,{maxHttpBufferSize:5e6,cors:{origin:true}});
 const PORT=process.env.PORT||3000,ADMIN_PASSWORD=process.env.ADMIN_PASSWORD||'3693';
 const TOPIC_STATE='samsung_plan_ws_2026_minji_v5/state',TOPIC_ACTION='samsung_plan_ws_2026_minji_v5/action',TOPIC_DRAW='samsung_plan_ws_2026_minji_v5/draw';
 app.use(express.static(__dirname));app.get('/',(_,res)=>res.sendFile(path.join(__dirname,'index.html')));app.get('/health',(_,res)=>res.json({ok:true,service:'earth-arcade'}));
 const scores=Object.fromEntries(Array.from({length:13},(_,i)=>['Table '+(i+1),0]));
 let state={game:'lobby',roundId:0,scores,players:[],drawer:null,drawingWord:'칼퇴근',drawingIndex:0,drawingQuestions:[{word:'칼퇴근',drawer:null}],secretNumber:45,quizIndex:0,oxIndex:0,choseongIndex:0,balanceIndex:0,speedIndex:0,quizzes:[{q:'전략기획팀의 주력 업무가 아닌 것은?',choices:['전략 수립','기획실 운영','직접 민원 응대','경영 지원'],answer:2},{q:'더플라잉팬레드에서 가장 먼저 할 일은?',choices:['메뉴판 정독','게임 승리하기','업무 보고하기','멍 때리기'],answer:1}],oxQuizzes:[{q:'사당동에 위치한 더플라잉팬레드는 회식 장소로 완벽하다?',answer:'O'},{q:'오늘 워크샵에서 우승한 테이블은 칼퇴 특권이 주어진다?',answer:'O'}],choseongList:[{target:'ㄱ ㅈ',answer:'기획조정'},{target:'ㅅ ㅅ ㅈ ㄱ',answer:'삼성증권'}]};
+
+// Only question content is persistent; live scores and player identities remain transient.
+const QUESTION_FIELDS=['quizzes','oxQuizzes','choseongList','drawingQuestions'];
+const SAVE_FILE=process.env.SAVE_FILE||path.join(__dirname,'questions.saved.json');
+const pool=process.env.DATABASE_URL?new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.PGSSL==='disable'?false:{rejectUnauthorized:false}}):null;
+let saveQueue=Promise.resolve(),saveTimer=null;
+function snapshotQuestions(){return Object.fromEntries(QUESTION_FIELDS.map(k=>[k,JSON.parse(JSON.stringify(state[k]))]));}
+async function loadQuestions(){
+ let saved=null;
+ if(pool){
+  await pool.query('CREATE TABLE IF NOT EXISTS game_question_store (id TEXT PRIMARY KEY, content JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+  const r=await pool.query('SELECT content FROM game_question_store WHERE id=$1',['main']);
+  if(r.rows.length)saved=r.rows[0].content;
+  console.log('Question storage: PostgreSQL');
+ }else{
+  if(fs.existsSync(SAVE_FILE))saved=JSON.parse(fs.readFileSync(SAVE_FILE,'utf8'));
+  console.warn('Question storage: local file; Render free filesystem is not durable');
+ }
+ if(saved&&typeof saved==='object'){
+  for(const k of QUESTION_FIELDS)if(Array.isArray(saved[k])&&saved[k].length)state[k]=saved[k].slice(0,200);
+  console.log('Saved questions restored');
+ }
+}
+function persistQuestions(){
+ const snapshot=snapshotQuestions();
+ saveQueue=saveQueue.catch(()=>{}).then(async()=>{
+  if(pool)await pool.query('INSERT INTO game_question_store (id,content,updated_at) VALUES ($1,$2,NOW()) ON CONFLICT (id) DO UPDATE SET content=EXCLUDED.content,updated_at=NOW()',['main',JSON.stringify(snapshot)]);
+  else{const tmp=SAVE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(snapshot,null,2));fs.renameSync(tmp,SAVE_FILE);}
+ }).catch(e=>console.error('Question autosave failed:',e.message));
+ return saveQueue;
+}
+function scheduleQuestionSave(){if(saveTimer)clearTimeout(saveTimer);saveTimer=setTimeout(()=>{saveTimer=null;persistQuestions();},350);}
+
 let latestDrawing='CLEAR';const scoredCorrect=new Set();
 let speedGoTimer=null;
 state.speedPhase='waiting';state.speedWinners=[];
 const durations={quiz:10000,drawing:300000,choseong:30000,ox:10000,balance:300000};
-state.startedAt=null;state.deadline=null;state.revealed=false;state.revealData=null;state.midScoreVisible=false;
+state.roundPhase='ready';state.remainingMs=0;state.startedAt=null;state.deadline=null;state.revealed=false;state.revealData=null;state.midScoreVisible=false;
 const roundWinners=[];
 function roundResult(){const i=state.game==='quiz'?state.quizIndex:state.game==='ox'?state.oxIndex:state.game==='choseong'?state.choseongIndex:0;
  let answer=state.game==='quiz'?state.quizzes[i]?.choices?.[state.quizzes[i]?.answer]:state.game==='ox'?state.oxQuizzes[i]?.answer:state.game==='choseong'?state.choseongList[i]?.answer:state.game==='drawing'?state.drawingWord:state.game==='balance'?state.secretNumber:null;
  const explanation=state.game==='ox'?(state.oxQuizzes[i]?.explanation||''):'';
  return {game:state.game,answer:state.game==='speed'?'선착순 3개 테이블':answer,explanation,rankings:roundWinners.map(x=>({...x}))};}
-function startRound(){if(speedGoTimer){clearTimeout(speedGoTimer);speedGoTimer=null;}state.speedPhase='waiting';state.speedWinners=[];state.startedAt=Date.now();state.deadline=durations[state.game]?state.startedAt+durations[state.game]:null;state.revealed=false;state.revealData=null;roundWinners.length=0;}
-function accepting(socket){if(!durations[state.game])return true;if(state.revealed||!state.deadline||Date.now()>=state.deadline){feedback(socket,'info','⏰ 정답 접수가 마감되었습니다.');return false;}return true;}
+function startRound(){
+ if(speedGoTimer){clearTimeout(speedGoTimer);speedGoTimer=null;}
+ state.speedPhase='waiting';state.speedWinners=[];
+ state.roundPhase='ready';state.remainingMs=durations[state.game]||0;
+ state.startedAt=null;state.deadline=null;state.revealed=false;state.revealData=null;roundWinners.length=0;
+}
+function accepting(socket){
+ if(state.roundPhase!=='running'||state.revealed){feedback(socket,'info','진행자가 시작할 때까지 기다려 주세요.');return false;}
+ if(!durations[state.game])return true;
+ if(!state.deadline||Date.now()>=state.deadline){feedback(socket,'info','⏰ 정답 접수가 마감되었습니다.');return false;}
+ return true;
+}
+function setRoundPhase(next){
+ if(!durations[state.game]||state.revealed)return;
+ if(next==='running'){
+  if(state.roundPhase==='running')return;
+  state.startedAt=Date.now();
+  state.deadline=state.startedAt+(state.roundPhase==='ready'?durations[state.game]:Math.max(0,Number(state.remainingMs)||0));
+  state.roundPhase='running';
+ }else if(next==='paused'&&state.roundPhase==='running'){
+  state.remainingMs=Math.max(0,state.deadline-Date.now());
+  state.deadline=null;state.roundPhase='paused';
+ }
+ publishState();
+}
 
 const validTable=t=>/^Table (?:[1-9]|1[0-3])$/.test(String(t||''));
 const emit=(topic,payload)=>io.emit('mqtt:message',{topic,payload:typeof payload==='string'?payload:JSON.stringify(payload)});
@@ -44,16 +101,19 @@ io.on('connection',socket=>{
    if(state.game==='drawing'&&(state.drawingWord!==old.drawingWord||JSON.stringify(state.drawer)!==JSON.stringify(old.drawer))){scoredCorrect.clear();latestDrawing='CLEAR';emit(TOPIC_DRAW,'CLEAR');}
    if(state.secretNumber!==old.secretNumber)for(const k of [...scoredCorrect])if(k.startsWith('updown:'))scoredCorrect.delete(k);
    state.midScoreVisible=old.midScoreVisible;
-   if(!roundChanged){state.speedPhase=old.speedPhase;state.speedWinners=old.speedWinners;state.startedAt=old.startedAt;state.deadline=old.deadline;state.revealed=old.revealed;state.revealData=old.revealData;}
+   if(!roundChanged){state.speedPhase=old.speedPhase;state.speedWinners=old.speedWinners;state.startedAt=old.startedAt;state.deadline=old.deadline;state.revealed=old.revealed;state.revealData=old.revealData;state.roundPhase=old.roundPhase;state.remainingMs=old.remainingMs;}
+   if(QUESTION_FIELDS.some(k=>JSON.stringify(old[k])!==JSON.stringify(state[k])))scheduleQuestionSave();
    publishState();return;
   }
-  if(topic===TOPIC_DRAW){if(!socket.data.isAdmin&&!sameDrawer(socket.data.player))return;if(state.game==='drawing'&&state.deadline&&Date.now()>=state.deadline)return;if(raw!=='CLEAR'&&!/^data:image\/(png|jpeg);base64,/.test(raw))return;latestDrawing=raw;emit(TOPIC_DRAW,raw);return;}
+  if(topic===TOPIC_DRAW){if(!socket.data.isAdmin&&!sameDrawer(socket.data.player))return;if(state.game==='drawing'&&(state.roundPhase!=='running'||!state.deadline||Date.now()>=state.deadline))return;if(raw!=='CLEAR'&&!/^data:image\/(png|jpeg);base64,/.test(raw))return;latestDrawing=raw;emit(TOPIC_DRAW,raw);return;}
   if(topic!==TOPIC_ACTION)return;let action;try{action=JSON.parse(raw);}catch{return;}if(!action||typeof action.type!=='string')return;
   if(action.type==='JOIN'){const input=action.player||{},table=String(input.table||''),name=String(input.name||'').trim().slice(0,32);if(!validTable(table)||!name)return socket.emit('server:error','테이블과 이름을 입력하세요.');socket.data.player={table,name};state.players=state.players.filter(p=>p.socketId!==socket.id);state.players.push({table,name,socketId:socket.id});publishState();emit(TOPIC_ACTION,{type:'JOIN',player:{table,name}});return;}
+  if(action.type==='ROUND_START'||action.type==='ROUND_RESUME'){if(socket.data.isAdmin)setRoundPhase('running');return;}
+  if(action.type==='ROUND_PAUSE'){if(socket.data.isAdmin)setRoundPhase('paused');return;}
   if(action.type==='SHOW_MID_SCORE'){if(!socket.data.isAdmin)return;state.midScoreVisible=true;publishState();return;}
   if(action.type==='CLOSE_MID_SCORE'){if(!socket.data.isAdmin)return;state.midScoreVisible=false;publishState();return;}
   if(action.type==='SPEED_START'){if(!socket.data.isAdmin||state.game!=='speed'||state.speedPhase!=='waiting')return;state.speedPhase='ready';publishState();const round=state.roundId;speedGoTimer=setTimeout(()=>{speedGoTimer=null;if(state.game==='speed'&&state.roundId===round&&state.speedPhase==='ready'){state.speedPhase='go';publishState();}},1500+Math.floor(Math.random()*2000));return;}
-  if(action.type==='REVEAL_ANSWER'){if(!socket.data.isAdmin||(!durations[state.game]&&state.game!=='speed'))return;state.revealed=true;state.revealData=roundResult();publishState();return;}
+  if(action.type==='REVEAL_ANSWER'){if(!socket.data.isAdmin||(!durations[state.game]&&state.game!=='speed'))return;state.revealed=true;state.roundPhase='ended';state.revealData=roundResult();publishState();return;}
   if(action.type==='SHOW_RESULT'){if(socket.data.isAdmin)emit(TOPIC_ACTION,action);return;}
   if(action.type==='ADMIN_SCORE'){if(!socket.data.isAdmin||!validTable(action.table))return;state.scores[action.table]+=(Number(action.delta)||0);publishState();return;}
   const player=socket.data.player;if(!player)return socket.emit('server:error','먼저 참가자 등록을 해주세요.');const table=player.table;
@@ -66,4 +126,4 @@ io.on('connection',socket=>{
  });
  socket.on('disconnect',()=>{if(socket.data.player){state.players=state.players.filter(p=>p.socketId!==socket.id);publishState();}});
 });
-server.listen(PORT,'0.0.0.0',()=>console.log('Earth arcade listening on '+PORT));
+loadQuestions().then(()=>server.listen(PORT,'0.0.0.0',()=>console.log('Earth arcade listening on '+PORT))).catch(e=>{console.error('Startup blocked to protect saved questions:',e.message);process.exit(1);});

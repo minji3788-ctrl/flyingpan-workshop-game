@@ -116,7 +116,9 @@
                     <div class="flex justify-between items-center gap-2"><strong class="text-cyan-300 text-base">👑 MC 퀵 진행</strong><span id="mc-phase" class="text-[11px] rounded-lg bg-slate-800 px-2 py-1 text-yellow-300">대기실</span></div>
                     <div class="flex justify-between items-center gap-2"><span id="mc-game-name" class="font-black text-white">게임을 선택하세요</span><span id="mc-question-count" class="text-xs text-slate-300">진행 대기</span></div>
                     <div class="grid grid-cols-2 gap-2">
-                        <button onclick="mcAdvance()" id="mc-next" class="col-span-2 py-4 rounded-xl bg-emerald-400 text-slate-950 font-black text-lg">▶ 게임 시작 / 다음 문제</button>
+                        <button onclick="mcAdvance()" id="mc-next" class="col-span-2 py-4 rounded-xl bg-emerald-400 text-slate-950 font-black text-lg">➡ 다음 문제 준비</button>
+                        <button onclick="controlRound('ROUND_START')" id="mc-round-start" class="py-3 rounded-xl bg-lime-400 text-slate-950 font-black text-sm">▶ 타이머 시작 / 재개</button>
+                        <button onclick="controlRound('ROUND_PAUSE')" id="mc-round-pause" class="py-3 rounded-xl bg-orange-500 text-white font-black text-sm">⏸ 일시정지</button>
                         <button onclick="revealCurrentAnswer()" class="py-3 rounded-xl bg-yellow-400 text-slate-950 font-black text-sm">🎯 정답 발표</button>
                         <button onclick="showMidScore()" class="py-3 rounded-xl bg-cyan-400 text-slate-950 font-black text-sm">🏆 중간 스코어</button>
                         <button onclick="closeMidScore()" class="py-2 rounded-xl bg-slate-700 text-white font-black text-xs">✖ 발표 닫기</button>
@@ -593,6 +595,7 @@
         }
 
         function startSpeedGo(){if(globalState.game!=='speed'){alert('먼저 6번 스피드 게임을 시작하세요.');return;}client.publish(TOPIC_ACTION,JSON.stringify({type:'SPEED_START'}));addAdminLog('⚡ 광클 GO 신호 요청','text-pink-300');}
+        function controlRound(type){if(!currentUser.isHost)return;client.publish(TOPIC_ACTION,JSON.stringify({type}));}
         function revealCurrentAnswer(){
             if(!currentUser.isHost)return;
             client.publish(TOPIC_ACTION,JSON.stringify({type:'REVEAL_ANSWER'}));
@@ -604,10 +607,11 @@
             const el=document.getElementById('round-timer-banner');if(!el)return;
             const active=['quiz','drawing','choseong','ox','balance','speed'].includes(globalState.game);
             el.style.display=active?'block':'none';if(!active)return;
-            const remain=Math.max(0,Math.ceil((Number(globalState.deadline||0)-Date.now())/1000));
+            const remain=Math.max(0,Math.ceil((globalState.roundPhase==='running'?Number(globalState.deadline||0)-Date.now():Number(globalState.remainingMs||0))/1000));
             const clock=document.getElementById('round-timer-clock');clock.textContent=globalState.game==='speed'?(globalState.speedPhase==='go'?'⚡ GO!':globalState.speedPhase==='closed'?'🏁 종료':'준비 중'):String(Math.floor(remain/60)).padStart(2,'0')+':'+String(remain%60).padStart(2,'0');clock.style.color=remain<=10?'#fb7185':'#67e8f9';
+            if(globalState.game!=='speed'&&globalState.roundPhase!=='running')clock.textContent=(globalState.roundPhase==='paused'?'⏸ ':'⏳ ')+clock.textContent;
             document.getElementById('round-timer-name').textContent=globalState.game==='speed'?'광클 스피드 · 선착순 3테이블':({quiz:'객관식',drawing:'드로잉',choseong:'초성',ox:'OX',balance:'눈치 숫자맞히기'})[globalState.game]+' · 남은 시간';
-            document.getElementById('round-timer-note').textContent=globalState.game==='speed'?'1등 30점 · 2등 20점 · 3등 10점':remain===0?'⏰ 시간 종료! 정답 발표 대기 중':'문제 종료 시 자동 접수 마감';
+            document.getElementById('round-timer-note').textContent=globalState.game==='speed'?'1등 30점 · 2등 20점 · 3등 10점':globalState.roundPhase==='ready'?'관리자 시작 대기':globalState.roundPhase==='paused'?'일시정지 · 관리자 재개 대기':remain===0?'⏰ 시간 종료! 정답 발표 대기 중':'문제 종료 시 자동 접수 마감';
             const result=globalState.revealData;
             document.getElementById('round-reveal-text').textContent=globalState.revealed&&result?'🎯 정답: '+result.answer+(result.explanation?'\n💡 '+result.explanation:'')+'\n'+(result.rankings||[]).map((x,i)=>(i+1)+'등 '+x.table+' +'+x.points+'점').join(' / '):'';
         }
@@ -639,6 +643,13 @@
             const count=lists?(globalState[lists]||[]).length:1;
             document.getElementById('mc-game-name').textContent=active?MC_GAME_NAMES[g]:'진행 대기';
             document.getElementById('mc-question-count').textContent=active&&lists?`${i} / ${count} 문제`:active?'단일 라운드':'게임 시작 전';
+            const startBtn=document.getElementById('mc-round-start'),pauseBtn=document.getElementById('mc-round-pause');
+            if(startBtn&&pauseBtn){
+                const timed=['quiz','drawing','choseong','ox','balance'].includes(g);
+                startBtn.classList.toggle('hidden',!timed||globalState.roundPhase==='running'||globalState.revealed);
+                pauseBtn.classList.toggle('hidden',!timed||globalState.roundPhase!=='running'||globalState.revealed);
+                startBtn.textContent=globalState.roundPhase==='paused'?'▶ 타이머 재개':'▶ 타이머 시작';
+            }
             document.getElementById('mc-phase').textContent=!active?'대기실':globalState.revealed?'정답 발표 완료':g==='speed'?(globalState.speedPhase==='go'?'GO 진행 중':globalState.speedPhase==='closed'?'선착순 마감':'GO 대기'):(Number(globalState.deadline||0)>Date.now()?'문제 진행 중':'진행/마감');
             document.getElementById('mc-next').textContent=!active?'▶ 1번 객관식 시작':g==='speed'?'➡️ 6번 종료 · 대기실로':lists&&i<count?'➡️ 다음 문제 시작':'➡️ 다음 게임으로';
             document.getElementById('mc-speed-go').classList.toggle('hidden',g!=='speed');
