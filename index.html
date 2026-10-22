@@ -215,7 +215,7 @@
                     <span class="text-xs font-black text-blue-300">⚡ [초성 퀴즈] 문제 추가 · 수정 · 삭제</span>
                     <select id="admin-cho-select" onchange="loadChoseongQuestion()" class="w-full px-2 py-1.5 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black"><option value="">기존 문제 선택</option></select>
                     <input type="text" id="admin-cho-target" placeholder="초성 입력 (예: ㄱ ㅎ ㅅ)" class="w-full px-2 py-1.5 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
-                    <input type="text" id="admin-cho-ans" placeholder="정답 입력 (예: 기획실)" class="w-full px-2 py-1.5 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
+                    <textarea id="admin-cho-hint" rows="2" placeholder="힌트 / 부가설명 (참가자에게 초성 위에 표시)" class="w-full px-2 py-2 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white"></textarea><input type="text" id="admin-cho-ans" placeholder="정답 입력 (예: 기획실)" class="w-full px-2 py-1.5 border border-cyan-400 rounded-lg text-xs bg-slate-950 text-white font-black">
                     <div class="grid grid-cols-3 gap-1">
                         <button onclick="saveChoseongQuestion('add')" class="py-2 bg-emerald-500 text-slate-950 rounded-lg text-xs font-black">➕ 추가</button>
                         <button onclick="saveChoseongQuestion('edit')" class="py-2 bg-blue-500 text-white rounded-lg text-xs font-black">✏️ 수정</button>
@@ -236,7 +236,7 @@
                             <option value="X">X (거짓)</option>
                         </select>
                     </div>
-                    <div class="grid grid-cols-3 gap-1">
+                    <textarea id="admin-ox-explanation" rows="3" placeholder="정답 발표 시 보여줄 부가설명" class="w-full px-2 py-2 border border-purple-400 rounded-lg text-xs bg-slate-950 text-white"></textarea><div class="grid grid-cols-3 gap-1">
                         <button onclick="adminAddOx()" class="py-2 bg-emerald-500 text-slate-950 rounded-lg text-xs font-black">➕ 추가</button>
                         <button onclick="adminEditOx()" class="py-2 bg-purple-600 text-white rounded-lg text-xs font-black">✏️ 수정</button>
                         <button onclick="adminDeleteOx()" class="py-2 bg-rose-500 text-white rounded-lg text-xs font-black">🗑️ 삭제</button>
@@ -317,7 +317,7 @@
             <div id="screen-choseong" class="screen hidden space-y-3">
                 <h3 class="text-lg font-black text-purple-300">⚡ 초성 퀴즈</h3>
                 <p class="text-xs font-black text-cyan-200">제시된 초성을 보고 단어를 입력하세요!</p>
-                <div id="choseong-target" class="text-3xl font-black text-cyan-300 py-5 bg-slate-900 rounded-2xl border-3 border-cyan-400 tracking-widest">ㄱ ㅈ</div>
+                <div id="choseong-hint" class="text-sm font-black text-yellow-200 px-3 py-2 rounded-lg bg-slate-800 whitespace-pre-wrap"></div><div id="choseong-target" class="text-3xl font-black text-cyan-300 py-5 bg-slate-900 rounded-2xl border-3 border-cyan-400 tracking-widest">ㄱ ㅈ</div>
                 <input type="text" id="choseong-input" placeholder="정답 입력" class="w-full px-4 py-3 geo-input text-center text-sm font-black">
                 <button onclick="submitChoseong()" class="w-full py-3 bg-purple-600 text-white font-black rounded-xl text-sm geo-btn shadow-[3px_3px_0px_#c084fc]">제출 (+10점) 🎯</button>
             </div>
@@ -609,7 +609,7 @@
             document.getElementById('round-timer-name').textContent=globalState.game==='speed'?'광클 스피드 · 선착순 3테이블':({quiz:'객관식',drawing:'드로잉',choseong:'초성',ox:'OX',balance:'눈치 숫자맞히기'})[globalState.game]+' · 남은 시간';
             document.getElementById('round-timer-note').textContent=globalState.game==='speed'?'1등 30점 · 2등 20점 · 3등 10점':remain===0?'⏰ 시간 종료! 정답 발표 대기 중':'문제 종료 시 자동 접수 마감';
             const result=globalState.revealData;
-            document.getElementById('round-reveal-text').textContent=globalState.revealed&&result?'🎯 정답: '+result.answer+'\n'+(result.rankings||[]).map((x,i)=>(i+1)+'등 '+x.table+' +'+x.points+'점').join(' / '):'';
+            document.getElementById('round-reveal-text').textContent=globalState.revealed&&result?'🎯 정답: '+result.answer+(result.explanation?'\n💡 '+result.explanation:'')+'\n'+(result.rankings||[]).map((x,i)=>(i+1)+'등 '+x.table+' +'+x.points+'점').join(' / '):'';
         }
         setInterval(updateRoundTimer,250);
 
@@ -828,22 +828,25 @@
             const q=globalState.choseongList[Number(v)]; if(!q)return;
             document.getElementById('admin-cho-target').value=q.target;
             document.getElementById('admin-cho-ans').value=q.answer;
+            document.getElementById('admin-cho-hint').value=q.hint||q.explanation||'';
         }
         function saveChoseongQuestion(mode) {
             const sel=document.getElementById('admin-cho-select');
             const target=document.getElementById('admin-cho-target').value.trim();
             const answer=document.getElementById('admin-cho-ans').value.trim();
+            const hint=document.getElementById('admin-cho-hint').value.trim();
             if(!target||!answer)return alert('초성과 정답을 모두 입력하세요.');
             if(mode==='edit' && sel.value==='')return alert('수정할 문제를 먼저 선택하세요.');
             if(mode==='add' && globalState.choseongList.length>=200)return alert('초성 문제는 최대 200개까지 등록할 수 있습니다.');
-            if(mode==='add')globalState.choseongList.push({target,answer});
-            else globalState.choseongList[Number(sel.value)]={target,answer};
+            if(mode==='add')globalState.choseongList.push({target,answer,hint});
+            else globalState.choseongList[Number(sel.value)]={target,answer,hint};
             if(globalState.game==='choseong' && mode==='edit' && Number(sel.value)===(globalState.choseongIndex||0))globalState.roundId=(globalState.roundId||0)+1;
             client.publish(TOPIC_STATE,JSON.stringify(globalState));
             refreshChoseongQuestions();
             sel.value='';
             document.getElementById('admin-cho-target').value='';
             document.getElementById('admin-cho-ans').value='';
+            document.getElementById('admin-cho-hint').value='';
             addAdminLog('⚡ 초성 문제 '+(mode==='add'?'추가':'수정')+': '+target,'text-blue-300');
             alert('초성 문제가 저장되었습니다.');
         }
@@ -874,16 +877,18 @@
             const q=globalState.oxQuizzes[Number(idx)];if(!q)return;
             document.getElementById('admin-ox-q').value=q.q;
             document.getElementById('admin-ox-ans').value=q.answer;
+            document.getElementById('admin-ox-explanation').value=q.explanation||'';
         }
         function saveOxQuestion(mode) {
             const sel=document.getElementById('admin-ox-select');
             const q=document.getElementById('admin-ox-q').value.trim();
             const answer=document.getElementById('admin-ox-ans').value;
+            const explanation=document.getElementById('admin-ox-explanation').value.trim();
             if(!q)return alert('OX 질문을 입력하세요.');
             if(mode==='edit'&&sel.value==='')return alert('수정할 문제를 먼저 선택하세요.');
             if(mode==='add'&&globalState.oxQuizzes.length>=200)return alert('OX 문제는 최대 200개까지 추가할 수 있습니다.');
-            if(mode==='add')globalState.oxQuizzes.push({q,answer});
-            else globalState.oxQuizzes[Number(sel.value)]={q,answer};
+            if(mode==='add')globalState.oxQuizzes.push({q,answer,explanation});
+            else globalState.oxQuizzes[Number(sel.value)]={q,answer,explanation};
             client.publish(TOPIC_STATE,JSON.stringify(globalState));
             refreshOxQuestions();
             if(mode==='add')sel.value=String(globalState.oxQuizzes.length-1);
@@ -1115,7 +1120,7 @@
             document.getElementById('quiz-feedback').innerText = '답안 제출 완료. 결과를 기다리세요…';
         }
 
-        function initChoseongUI() { document.getElementById('choseong-target').innerText = globalState.choseongList[globalState.choseongIndex || 0].target; document.getElementById('choseong-input').value = ''; }
+        function initChoseongUI() { const q=globalState.choseongList[globalState.choseongIndex || 0]||{}; document.getElementById('choseong-target').innerText=q.target||''; document.getElementById('choseong-hint').textContent=q.hint||q.explanation||''; document.getElementById('choseong-hint').style.display=(q.hint||q.explanation)?'block':'none'; document.getElementById('choseong-input').value = ''; }
         function submitChoseong() {
             const val = document.getElementById('choseong-input').value.trim();
             if (!val) return;
@@ -1192,7 +1197,7 @@
     </div>
 </div>
 
-<div id="round-timer-banner" style="display:none;position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:1000;background:#0f172a;color:#67e8f9;border:2px solid #22d3ee;border-radius:14px;padding:8px 16px;text-align:center;box-shadow:0 4px 16px #0009;min-width:200px;font-weight:bold"><div id="round-timer-name" style="font-size:12px">남은 시간</div><div id="round-timer-clock" style="font-size:30px;font-variant-numeric:tabular-nums">00:00</div><div id="round-timer-note" style="font-size:11px;color:#cbd5e1"></div><div id="round-reveal-text" style="font-size:13px;color:#fde68a;white-space:pre-wrap"></div></div>
+<div id="round-timer-banner" style="display:none;position:fixed;top:8px;right:8px;z-index:1000;background:#0f172a;color:#67e8f9;border:2px solid #22d3ee;border-radius:14px;padding:4px 7px;text-align:center;box-shadow:0 4px 16px #0009;max-width:170px;font-weight:bold"><div id="round-timer-name" style="font-size:9px">남은 시간</div><div id="round-timer-clock" style="font-size:19px;font-variant-numeric:tabular-nums">00:00</div><div id="round-timer-note" style="font-size:9px;color:#cbd5e1"></div><div id="round-reveal-text" style="font-size:11px;color:#fde68a;white-space:pre-wrap"></div></div>
 <script>
         function mcOpenMode(mode) {
             const advanced = document.getElementById('mc-advanced');

@@ -14,7 +14,8 @@ state.startedAt=null;state.deadline=null;state.revealed=false;state.revealData=n
 const roundWinners=[];
 function roundResult(){const i=state.game==='quiz'?state.quizIndex:state.game==='ox'?state.oxIndex:state.game==='choseong'?state.choseongIndex:0;
  let answer=state.game==='quiz'?state.quizzes[i]?.choices?.[state.quizzes[i]?.answer]:state.game==='ox'?state.oxQuizzes[i]?.answer:state.game==='choseong'?state.choseongList[i]?.answer:state.game==='drawing'?state.drawingWord:state.game==='balance'?state.secretNumber:null;
- return {game:state.game,answer:state.game==='speed'?'선착순 3개 테이블':answer,rankings:roundWinners.map(x=>({...x}))};}
+ const explanation=state.game==='ox'?(state.oxQuizzes[i]?.explanation||''):'';
+ return {game:state.game,answer:state.game==='speed'?'선착순 3개 테이블':answer,explanation,rankings:roundWinners.map(x=>({...x}))};}
 function startRound(){if(speedGoTimer){clearTimeout(speedGoTimer);speedGoTimer=null;}state.speedPhase='waiting';state.speedWinners=[];state.startedAt=Date.now();state.deadline=durations[state.game]?state.startedAt+durations[state.game]:null;state.revealed=false;state.revealData=null;roundWinners.length=0;}
 function accepting(socket){if(!durations[state.game])return true;if(state.revealed||!state.deadline||Date.now()>=state.deadline){feedback(socket,'info','⏰ 정답 접수가 마감되었습니다.');return false;}return true;}
 
